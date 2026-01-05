@@ -5,11 +5,6 @@
   "compatibility_date": "2024-12-01",
   "compatibility_flags": ["nodejs_compat"],
 
-  // Static assets (sounds, etc.)
-  "assets": {
-    "directory": "./public"
-  },
-
   // Durable Objects for the Agent
   "durable_objects": {
     "bindings": [
