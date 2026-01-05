@@ -1,0 +1,89 @@
+{
+  "extensions": [
+    {
+      "name": "linear",
+      "author": "thomaslombart",
+      "owner": "linear",
+      "description": "Create, search, and manage Linear issues",
+      "commands": [
+        {
+          "name": "create-issue-for-myself",
+          "title": "Create Issue for Myself",
+          "description": "Create and assign a new issue to yourself.",
+          "arguments": [
+            {
+              "name": "title",
+              "type": "string",
+              "description": "Title",
+              "required": true
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "description": "Description",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "search-issues",
+          "title": "Search Issues",
+          "description": "Search issues globally in all projects."
+        },
+        {
+          "name": "assigned-issues",
+          "title": "My Issues",
+          "description": "View and modify issues that are assigned to you."
+        }
+      ]
+    },
+    {
+      "name": "spotify-player",
+      "author": "mattisssa",
+      "description": "Control Spotify playback",
+      "commands": [
+        {
+          "name": "justPlay",
+          "title": "Just Play",
+          "description": "Quickly start playing a song based on your query.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "string",
+              "description": "Song / Artist",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "togglePlayPause",
+          "title": "Toggle Play/Pause",
+          "description": "Toggle the playback of the current song."
+        },
+        {
+          "name": "next",
+          "title": "Next",
+          "description": "Skip to the next song/episode."
+        }
+      ]
+    },
+    {
+      "name": "slack",
+      "author": "mommertf",
+      "description": "Search and open Slack channels/conversations",
+      "commands": [
+        {
+          "name": "search",
+          "title": "Open Channel",
+          "description": "Search for workspace members, group chats, and channels."
+        },
+        {
+          "name": "unread-messages",
+          "title": "Unread Messages",
+          "description": "Browse through unread messages."
+        }
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files - NEVER COMMIT ACTUAL SECRETS
+.env
+.env.local
+.env.*.local
+.dev.vars
+.dev.vars.local
+
+# Config with secrets
+bridge.config.json
+
+# Tunnel configuration (contains credentials)
+.tunnel.json
+start-tunnel.sh
+.env.tunnel
+
+# Cloudflare/Wrangler
+.wrangler/
+.mf/
+
+# Keep example files
+!*.example
+!*.example.*
+!bridge.config.example.json

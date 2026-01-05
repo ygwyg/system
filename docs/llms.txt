@@ -1,0 +1,172 @@
+# SYSTEM
+
+> Remote Mac automation powered by AI. Control your Mac from anywhere using natural language.
+
+## Overview
+
+SYSTEM is an AI agent that controls your Mac remotely. It uses a split architecture:
+- **Agent** (brain): Cloudflare Worker with Durable Objects for state, scheduling, memory
+- **Bridge** (body): Local server on your Mac that executes commands
+
+The agent understands natural language and translates requests into tool calls.
+
+## Quick Start
+
+```bash
+git clone https://github.com/ygwyg/system
+cd system && npm install
+npm run setup  # Interactive wizard
+npm start      # Run everything
+```
+
+## Authentication
+
+All requests require: `Authorization: Bearer <api_secret>`
+
+## Base URLs
+
+- Agent: `https://your-agent.workers.dev`
+- Bridge: `http://localhost:3456`
+
+---
+
+# API Reference
+
+## Chat
+
+```
+POST /chat
+{ "message": "Play some jazz music" }
+```
+
+Response:
+```json
+{
+  "message": "Playing jazz on Apple Music",
+  "actions": [{ "tool": "music_play", "args": { "query": "jazz" }, "success": true }]
+}
+```
+
+## Schedules
+
+```
+GET /schedules          # List scheduled tasks
+DELETE /schedules/:id   # Cancel a schedule
+```
+
+## State
+
+```
+GET /state    # Debug: get agent state
+POST /reset   # Clear all state
+```
+
+## WebSocket
+
+```
+wss://your-agent.workers.dev/ws?token=...
+```
+
+Events: `scheduled_result`, `notification`, `bridge_status`
+
+---
+
+# Tools
+
+## Core
+- `open_app` - Open application
+- `open_url` - Open URL in browser
+- `shell` - Run safe shell commands
+- `shell_list` - List available shell commands
+- `applescript` - Execute AppleScript
+- `notify` - Show notification
+- `say` - Text-to-speech
+- `clipboard_get/set` - Clipboard access
+- `screenshot` - Take screenshot
+
+## Music
+- `music_play/pause/next/previous/current`
+- `volume_get/set/up/down/mute`
+
+## Messaging
+- `search_contacts` - Find contact by name
+- `send_imessage` - Send iMessage (requires confirmation)
+
+## Calendar & Reminders
+- `calendar_today/upcoming/next/create`
+- `reminders_list/create/complete`
+
+## System
+- `battery_status`, `wifi_status`, `storage_status`
+- `running_apps`, `front_app`
+- `brightness_set`, `dark_mode_toggle`, `dnd_toggle`
+- `lock_screen`, `sleep_display`, `sleep_mac`
+
+## Notes
+- `notes_list/search/create/read/append`
+
+## Files
+- `finder_search/downloads/desktop/reveal/trash`
+
+## Shortcuts
+- `shortcut_run`, `shortcut_list`
+
+## Browser
+- `browser_url`, `browser_tabs`
+
+## Raycast
+- Scans `~/.config/raycast/extensions/` during setup
+- Each enabled command becomes a tool: `{extension}_{command}`
+- Example: `linear_create_issue_for_myself`, `spotify_player_play`
+- Compatible: no-view commands (best), view commands (partial)
+- Not compatible: form commands, menu bar commands
+- Popular: spotify-player, linear, slack, todoist, github, notion
+- Generic fallback: `raycast` tool for any extension
+
+---
+
+# Architecture
+
+```
+User → Agent (Cloudflare) → Bridge (Mac) → Tool → Response
+```
+
+- Agent handles NLP, state, scheduling
+- Bridge executes commands locally
+- Connected via Cloudflare Tunnel
+
+---
+
+# Security
+
+- Bearer token authentication
+- Shell command allowlisting
+- Dangerous pattern blocking
+- Human-in-the-loop for messaging
+- Ephemeral tunnel URLs
+
+## Cloudflare Access (Recommended)
+
+For deployed agents, add Cloudflare Access for Zero Trust auth at the edge:
+
+1. Go to Cloudflare Zero Trust Dashboard
+2. Access → Applications → Add Self-hosted app
+3. Enter your worker URL
+4. Create policy (e.g., email = you@example.com)
+
+This adds authentication before requests reach your agent. Can be automated via Terraform (`cloudflare_access_application` resource).
+
+---
+
+# Stack
+
+- Runtime: Cloudflare Workers + Durable Objects
+- AI: Claude (Anthropic)
+- Bridge: Node.js + Express
+- Tunnel: Cloudflare Quick Tunnel
+- Tools: AppleScript, shell, Raycast
+
+---
+
+License: MIT
+Repository: https://github.com/ygwyg/system

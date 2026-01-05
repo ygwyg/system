@@ -1,0 +1,20 @@
+{
+  "name": "system-agent",
+  "version": "1.0.0",
+  "description": "SYSTEM Agent - Cloudflare Worker that controls your Mac via AI",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.2",
+    "agents": "^0.3.3",
+    "ai": "^6.0.5",
+    "hono": "^4.11.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "wrangler": "^4.54.0"
+  }
+}

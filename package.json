@@ -1,0 +1,48 @@
+{
+  "name": "system-mac",
+  "version": "1.0.0",
+  "description": "SYSTEM - Control your Mac from anywhere via AI.",
+  "type": "module",
+  "bin": {
+    "system": "./dist/cli/setup.js"
+  },
+  "scripts": {
+    "setup": "node dist/cli/setup.js",
+    "start": "node dist/cli/start.js",
+    "dev": "node dist/bridge/http-server.js",
+    "build": "tsc",
+    "postinstall": "npm run build || true"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "chalk": "^5.6.2",
+    "enquirer": "^2.4.1",
+    "express": "^4.18.2",
+    "open": "^10.0.3",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  },
+  "keywords": [
+    "mac",
+    "automation",
+    "ai",
+    "agent",
+    "applescript",
+    "raycast",
+    "remote-control"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ygwyg/system"
+  },
+  "homepage": "https://github.com/ygwyg/system#readme",
+  "bugs": {
+    "url": "https://github.com/ygwyg/system/issues"
+  }
+}

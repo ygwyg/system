@@ -1,0 +1,27 @@
+# ═══════════════════════════════════════════════════════════════
+# SYSTEM Agent - Local Development Variables
+# ═══════════════════════════════════════════════════════════════
+# 
+# Copy this file to .dev.vars and fill in your values:
+#   cp .dev.vars.example .dev.vars
+#
+# For production, use wrangler secrets instead:
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler secret put BRIDGE_URL
+#   npx wrangler secret put BRIDGE_AUTH_TOKEN
+#   npx wrangler secret put API_SECRET
+# ═══════════════════════════════════════════════════════════════
+
+# Your Anthropic API key (get one at https://console.anthropic.com)
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+
+# Your bridge URL (local or tunnel)
+# Local: http://localhost:3000
+# Tunnel: https://system.yourdomain.com
+BRIDGE_URL=http://localhost:3000
+
+# Token to authenticate with your bridge (from bridge.config.json or BRIDGE_AUTH_TOKEN env)
+BRIDGE_AUTH_TOKEN=your-bridge-token-here
+
+# Token for UI access (generate with: openssl rand -hex 16)
+API_SECRET=your-ui-access-token

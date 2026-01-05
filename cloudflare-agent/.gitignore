@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files - NEVER COMMIT THESE
+.dev.vars
+.dev.vars.local
+.env
+.env.local
+.env.*.local
+
+# Wrangler
+.wrangler/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Cloudflare
+.mf/
+

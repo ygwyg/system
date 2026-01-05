@@ -1,0 +1,47 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "system-agent",
+  "main": "src/server.ts",
+  "compatibility_date": "2024-12-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Static assets (sounds, etc.)
+  "assets": {
+    "directory": "./public"
+  },
+
+  // Durable Objects for the Agent
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SystemAgent",
+        "class_name": "SystemAgent"
+      }
+    ]
+  },
+
+  // SQLite migration for agent state
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SystemAgent"]
+    }
+  ]
+
+  // ═══════════════════════════════════════════════════════════════
+  // SECRETS - Set these before deploying!
+  // ═══════════════════════════════════════════════════════════════
+  // 
+  // Run these commands to set your secrets:
+  //
+  //   npx wrangler secret put ANTHROPIC_API_KEY
+  //   npx wrangler secret put BRIDGE_URL
+  //   npx wrangler secret put BRIDGE_AUTH_TOKEN
+  //   npx wrangler secret put API_SECRET
+  //
+  // ANTHROPIC_API_KEY: Your Claude API key (sk-ant-...)
+  // BRIDGE_URL: Your tunnel URL (https://system.yourdomain.com)
+  // BRIDGE_AUTH_TOKEN: Token to authenticate with your bridge
+  // API_SECRET: Token for UI access (generate with: openssl rand -hex 16)
+  // ═══════════════════════════════════════════════════════════════
+}

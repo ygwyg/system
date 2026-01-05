@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SYSTEM — docs</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0a;
+      --bg-subtle: #111;
+      --bg-panel: #0e0e0e;
+      --border: #1a1a1a;
+      --border-bright: #252525;
+      --text: #888;
+      --text-bright: #c0c0c0;
+      --text-dim: #444;
+      --green: #5a8;
+      --green-dim: #354;
+      --red: #a54;
+      --purple: #a5a;
+    }
+
+    html { scroll-behavior: smooth; }
+    
+    body {
+      font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+
+    /* Noise texture overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      opacity: 0.03;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      z-index: 1000;
+    }
+
+    a { color: var(--green); text-decoration: none; }
+    a:hover { color: var(--text-bright); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-bright); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+    /* Header */
+    header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 48px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      z-index: 100;
+    }
+
+    .logo {
+      font-weight: 500;
+      color: var(--text-bright);
+      letter-spacing: -0.5px;
+      font-size: 14px;
+    }
+    .logo span { color: var(--text-dim); font-weight: 400; }
+
+    .header-links {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header-links a {
+      color: var(--text-dim);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .header-links a:hover { color: var(--text); }
+
+    /* Layout */
+    .layout {
+      display: flex;
+      padding-top: 48px;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 200px;
+      position: fixed;
+      top: 48px;
+      left: 0;
+      bottom: 0;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+      padding: 20px 0;
+      overflow-y: auto;
+    }
+
+    .nav-section {
+      padding: 0 16px;
+      margin-bottom: 16px;
+    }
+    .nav-title {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+    .nav-link {
+      display: block;
+      padding: 4px 12px;
+      color: var(--text);
+      font-size: 12px;
+      border-left: 1px solid transparent;
+      margin-left: -1px;
+    }
+    .nav-link:hover { color: var(--text-bright); }
+    .nav-link.active {
+      color: var(--green);
+      border-left-color: var(--green);
+    }
+
+    /* Main content */
+    main {
+      flex: 1;
+      margin-left: 200px;
+      padding: 40px;
+      max-width: 800px;
+    }
+
+    section {
+      margin-bottom: 60px;
+      scroll-margin-top: 80px;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 500;
+      color: var(--text-bright);
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+    h2 {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-bright);
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 24px 0 12px;
+    }
+
+    p { margin-bottom: 16px; }
+
+    .subtitle {
+      color: var(--text-dim);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 32px;
+    }
+
+    /* Cards */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .card {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      padding: 16px;
+    }
+    .card-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+    .card-value { color: var(--text-bright); font-size: 12px; }
+
+    /* Code blocks */
+    pre {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      padding: 16px;
+      overflow-x: auto;
+      margin: 16px 0;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    code {
+      font-family: inherit;
+      color: var(--text-bright);
+    }
+    p code, li code {
+      background: var(--bg-subtle);
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      font-size: 11px;
+    }
+
+    /* Syntax highlighting */
+    .hl-comment { color: var(--text-dim); }
+    .hl-property { color: var(--green); }
+    .hl-string { color: #7af; }
+    .hl-number { color: var(--purple); }
+    .hl-keyword { color: var(--red); }
+
+    /* Endpoint cards */
+    .endpoint {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      margin: 16px 0;
+    }
+    .endpoint-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .method {
+      font-size: 10px;
+      font-weight: 500;
+      padding: 2px 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .method-get { background: var(--green-dim); color: var(--green); }
+    .method-post { background: #234; color: #7af; }
+    .method-delete { background: #432; color: var(--red); }
+    .endpoint-path { color: var(--text-bright); font-size: 12px; }
+    .endpoint-body { padding: 16px; }
+    .endpoint-desc { color: var(--text); margin-bottom: 12px; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 12px;
+    }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-weight: 500;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    td {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    td code {
+      color: var(--green);
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    /* Info boxes */
+    .info {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--green);
+      padding: 16px;
+      margin: 16px 0;
+    }
+    .info-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--green);
+      margin-bottom: 8px;
+    }
+    .info p { margin: 0; }
+
+    .warning {
+      border-left-color: var(--red);
+    }
+    .warning .info-title { color: var(--red); }
+
+    /* Architecture diagram */
+    .diagram {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      padding: 24px;
+      margin: 20px 0;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--text-dim);
+      overflow-x: auto;
+    }
+    .diagram .highlight { color: var(--green); }
+    .diagram .dim { color: var(--text-dim); }
+
+    /* Tool badges */
+    .badge {
+      display: inline-block;
+      font-size: 9px;
+      padding: 2px 6px;
+      background: var(--green-dim);
+      color: var(--green);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-left: 8px;
+    }
+
+    /* Lists */
+    ul, ol {
+      margin: 16px 0;
+      padding-left: 20px;
+    }
+    li {
+      margin: 4px 0;
+      color: var(--text);
+    }
+
+    /* Security grid */
+    .security-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .security-item {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      padding: 16px;
+    }
+    .security-item h4 {
+      font-size: 12px;
+      color: var(--text-bright);
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    .security-item p {
+      font-size: 11px;
+      color: var(--text);
+      margin: 0;
+    }
+
+    /* Mobile menu */
+    .mobile-menu-btn {
+      display: none;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .mobile-menu-btn:hover { color: var(--text-bright); border-color: var(--border-bright); }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .mobile-menu-btn { display: block; }
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.2s;
+        z-index: 99;
+        width: 240px;
+      }
+      .sidebar.open { transform: translateX(0); }
+      main { margin-left: 0; padding: 24px; }
+      .cards { grid-template-columns: 1fr; }
+      .security-grid { grid-template-columns: 1fr; }
+      header { padding: 0 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <button class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('open')">menu</button>
+      <div class="logo">SYSTEM <span>/ docs</span></div>
+    </div>
+    <div class="header-links">
+      <a href="llms.txt">llms.txt</a>
+      <a href="https://github.com/ygwyg/system">github</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="nav-section">
+        <div class="nav-title">getting started</div>
+        <a href="#intro" class="nav-link">introduction</a>
+        <a href="#quickstart" class="nav-link">quick start</a>
+        <a href="#architecture" class="nav-link">architecture</a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-title">agent api</div>
+        <a href="#auth" class="nav-link">authentication</a>
+        <a href="#chat" class="nav-link">chat</a>
+        <a href="#schedules" class="nav-link">schedules</a>
+        <a href="#state" class="nav-link">state</a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-title">tools</div>
+        <a href="#core-tools" class="nav-link">core</a>
+        <a href="#music-tools" class="nav-link">music</a>
+        <a href="#messaging-tools" class="nav-link">messaging</a>
+        <a href="#system-tools" class="nav-link">system</a>
+        <a href="#notes-tools" class="nav-link">notes</a>
+        <a href="#files-tools" class="nav-link">files</a>
+        <a href="#shortcuts-tools" class="nav-link">shortcuts</a>
+        <a href="#browser-tools" class="nav-link">browser</a>
+        <a href="#raycast-tools" class="nav-link">raycast</a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-title">advanced</div>
+        <a href="#bridge" class="nav-link">bridge api</a>
+        <a href="#websocket" class="nav-link">websocket</a>
+        <a href="#security" class="nav-link">security</a>
+      </div>
+    </aside>
+
+    <main>
+      <!-- Introduction -->
+      <section id="intro">
+        <h1>SYSTEM</h1>
+        <p class="subtitle">remote mac automation</p>
+        <p>Control your Mac from anywhere using natural language. Built with Cloudflare Agents SDK for intelligent scheduling, memory, and tool orchestration.</p>
+        
+        <div class="cards">
+          <div class="card">
+            <div class="card-label">agent url</div>
+            <div class="card-value">https://your-agent.workers.dev</div>
+          </div>
+          <div class="card">
+            <div class="card-label">bridge</div>
+            <div class="card-value">localhost:3456</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quick Start -->
+      <section id="quickstart">
+        <h2>quick start</h2>
+        
+        <h3>1. clone and install</h3>
+        <pre><code>git clone https://github.com/ygwyg/system
+cd system && npm install</code></pre>
+
+        <h3>2. run setup wizard</h3>
+        <pre><code>npm run setup</code></pre>
+        <p>Interactive setup: Anthropic API key, Raycast extensions, remote access.</p>
+
+        <h3>3. start system</h3>
+        <pre><code>npm start</code></pre>
+        <p>Starts bridge, tunnel, and opens the agent UI.</p>
+      </section>
+
+      <!-- Architecture -->
+      <section id="architecture">
+        <h2>architecture</h2>
+        <p>SYSTEM uses a split architecture for security: the Agent (brain) runs on Cloudflare Workers, while the Bridge (body) runs locally on your Mac.</p>
+
+        <div class="diagram">
+<pre>
+┌───────────────────────────────────────────────────────┐
+│                        <span class="highlight">USER</span>                           │
+│                    (phone/browser)                    │
+└─────────────────────┬─────────────────────────────────┘
+                      │ HTTPS
+                      ▼
+┌───────────────────────────────────────────────────────┐
+│                  <span class="highlight">AGENT</span> (Brain)                        │
+│              Cloudflare Workers                       │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
+│  │   Claude    │  │   State     │  │  Schedules  │    │
+│  │     AI      │  │  (D.O.)     │  │   (D.O.)    │    │
+│  └─────────────┘  └─────────────┘  └─────────────┘    │
+└─────────────────────┬─────────────────────────────────┘
+                      │ Tunnel
+                      ▼
+┌───────────────────────────────────────────────────────┐
+│                  <span class="highlight">BRIDGE</span> (Body)                        │
+│                Your Mac (local)                       │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
+│  │ AppleScript │  │    Shell    │  │   Raycast   │    │
+│  └─────────────┘  └─────────────┘  └─────────────┘    │
+└───────────────────────────────────────────────────────┘
+</pre>
+        </div>
+
+        <div class="cards">
+          <div class="card">
+            <div class="card-label">agent (brain)</div>
+            <div class="card-value">
+              • Cloudflare Workers + D.O.<br>
+              • Claude for NLP<br>
+              • State, memory, scheduling<br>
+              • WebSocket real-time
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-label">bridge (body)</div>
+            <div class="card-value">
+              • Local Express server<br>
+              • AppleScript, shell exec<br>
+              • Raycast extensions<br>
+              • Cloudflare Tunnel
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Authentication -->
+      <section id="auth">
+        <h2>authentication</h2>
+        <p>All requests require an API secret via Bearer token or query parameter.</p>
+
+        <pre><code><span class="hl-comment">// Header</span>
+Authorization: Bearer &lt;api_secret&gt;
+
+<span class="hl-comment">// Or query parameter</span>
+?token=&lt;api_secret&gt;</code></pre>
+
+        <div class="info">
+          <div class="info-title">note</div>
+          <p>The API secret is generated during <code>npm run setup</code> and stored in <code>bridge.config.json</code>.</p>
+        </div>
+      </section>
+
+      <!-- Chat -->
+      <section id="chat">
+        <h2>chat</h2>
+        <p>Send natural language commands to control your Mac.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/chat</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Send a message to the agent.</p>
+            <h3>request</h3>
+            <pre><code>{
+  <span class="hl-property">"message"</span>: <span class="hl-string">"Play some jazz music"</span>
+}</code></pre>
+            <h3>response</h3>
+            <pre><code>{
+  <span class="hl-property">"message"</span>: <span class="hl-string">"Playing jazz on Apple Music"</span>,
+  <span class="hl-property">"actions"</span>: [{
+    <span class="hl-property">"tool"</span>: <span class="hl-string">"music_play"</span>,
+    <span class="hl-property">"args"</span>: { <span class="hl-property">"query"</span>: <span class="hl-string">"jazz"</span> },
+    <span class="hl-property">"success"</span>: <span class="hl-keyword">true</span>,
+    <span class="hl-property">"result"</span>: <span class="hl-string">"Now playing: Jazz Vibes"</span>
+  }]
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/reset</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Clear conversation history and state.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Schedules -->
+      <section id="schedules">
+        <h2>schedules</h2>
+        <p>Schedule one-time or recurring tasks using natural language or cron syntax.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/schedules</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">List all scheduled tasks.</p>
+            <pre><code>{
+  <span class="hl-property">"schedules"</span>: [{
+    <span class="hl-property">"id"</span>: <span class="hl-string">"abc123"</span>,
+    <span class="hl-property">"description"</span>: <span class="hl-string">"Play closing time"</span>,
+    <span class="hl-property">"scheduledAt"</span>: <span class="hl-string">"2026-01-05T17:00:00Z"</span>,
+    <span class="hl-property">"cron"</span>: <span class="hl-string">"0 17 * * *"</span>
+  }]
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method method-delete">DELETE</span>
+            <span class="endpoint-path">/schedules/:id</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Cancel a scheduled task by ID.</p>
+          </div>
+        </div>
+
+        <div class="info">
+          <div class="info-title">natural language examples</div>
+          <p>
+            • "Remind me to call mom in 30 minutes"<br>
+            • "Every day at 5pm, play Closing Time"<br>
+            • "At 9am tomorrow, open Linear"
+          </p>
+        </div>
+      </section>
+
+      <!-- State -->
+      <section id="state">
+        <h2>state</h2>
+        <p>The agent maintains persistent state including preferences and conversation history.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/state</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Get current agent state for debugging.</p>
+            <pre><code>{
+  <span class="hl-property">"preferences"</span>: { <span class="hl-property">"wife"</span>: <span class="hl-string">"Jane"</span> },
+  <span class="hl-property">"historyLength"</span>: <span class="hl-number">12</span>,
+  <span class="hl-property">"scheduleCount"</span>: <span class="hl-number">2</span>
+}</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- Core Tools -->
+      <section id="core-tools">
+        <h2>core tools</h2>
+        <p>Foundational tools for Mac automation.</p>
+
+        <table>
+          <thead>
+            <tr><th>tool</th><th>description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>open_app</code></td><td>Open any application</td></tr>
+            <tr><td><code>open_url</code></td><td>Open URL in browser</td></tr>
+            <tr><td><code>shell</code></td><td>Run safe shell commands</td></tr>
+            <tr><td><code>shell_list</code></td><td>List available shell commands</td></tr>
+            <tr><td><code>applescript</code></td><td>Execute AppleScript</td></tr>
+            <tr><td><code>notify</code></td><td>Show macOS notification</td></tr>
+            <tr><td><code>say</code></td><td>Text-to-speech</td></tr>
+            <tr><td><code>clipboard_get</code></td><td>Get clipboard contents</td></tr>
+            <tr><td><code>clipboard_set</code></td><td>Set clipboard contents</td></tr>
+            <tr><td><code>screenshot</code></td><td>Take screenshot</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Music Tools -->
+      <section id="music-tools">
+        <h2>music</h2>
+        <p>Control Apple Music playback.</p>
+
+        <table>
+          <thead>
+            <tr><th>tool</th><th>description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>music_play</code></td><td>Play/search music</td></tr>
+            <tr><td><code>music_pause</code></td><td>Pause playback</td></tr>
+            <tr><td><code>music_next</code></td><td>Skip to next track</td></tr>
+            <tr><td><code>music_previous</code></td><td>Previous track</td></tr>
+            <tr><td><code>music_current</code></td><td>Get current track info</td></tr>
+            <tr><td><code>volume_get</code></td><td>Get volume level</td></tr>
+            <tr><td><code>volume_set</code></td><td>Set volume (0-100)</td></tr>
+            <tr><td><code>volume_up</code></td><td>Increase volume 10%</td></tr>
+            <tr><td><code>volume_down</code></td><td>Decrease volume 10%</td></tr>
+            <tr><td><code>volume_mute</code></td><td>Toggle mute</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Messaging Tools -->
+      <section id="messaging-tools">
+        <h2>messaging</h2>
+        <p>Send iMessages with human-in-the-loop confirmation.</p>
+
+        <table>
+          <thead>
+            <tr><th>tool</th><th>description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>search_contacts</code></td><td>Find contact by name</td></tr>
+            <tr><td><code>send_imessage</code></td><td>Send iMessage</td></tr>
+          </tbody>
+        </table>
+
+        <div class="info">
+          <div class="info-title">safety flow</div>
+          <p>When you say "text my wife hello", SYSTEM will: 1) resolve "wife" from preferences, 2) search contacts, 3) ask for confirmation before sending.</p>
+        </div>
+      </section>
+
+      <!-- System Tools -->
+      <section id="system-tools">
+        <h2>system</h2>
+        <p>Control system settings, get status, manage files and apps.</p>
+
+        <h3>calendar & reminders</h3>
+        <table>
+          <thead>
+            <tr><th>tool</th><th>description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>calendar_today</code></td><td>Today's events</td></tr>
+            <tr><td><code>calendar_upcoming</code></td><td>Upcoming events</td></tr>
+            <tr><td><code>calendar_next</code></td><td>Next event</td></tr>
+            <tr><td><code>calendar_create</code></td><td>Create event</td></tr>
+            <tr><td><code>reminders_list</code></td><td>List reminders</td></tr>
+            <tr><td><code>reminders_create</code></td><td>Create reminder</td></tr>
+            <tr><td><code>reminders_complete</code></td><td>Complete reminder</td></tr>
+          </tbody>
+        </table>
+
+        <h3>display & focus</h3>
+        <table>
+          <thead>
+            <tr><th>tool</th><th>description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>brightness_set</code></td><td>Set brightness</td></tr>
+            <tr><td><code>dark_mode_toggle</code></td><td>Toggle dark mode</td></tr>
+            <tr><td><code>dark_mode_status</code></td><td>Get dark mode status</td></tr>
+            <tr><td><code>dnd_toggle</code></td><td>Toggle Do Not Disturb</td></tr>
+            <tr><td><code>lock_screen</code></td><td>Lock Mac</td></tr>
+            <tr><td><code>sleep_display</code></td><td>Sleep display</td></tr>
+            <tr><td><code>sleep_mac</code></td><td>Sleep Mac</td></tr>
+          </tbody>
+        </table>
+
+        <h3>system status</h3>
+        <table>
+          <thead>
+            <tr><th>tool</th><th>description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>battery_status</code></td><td>Battery level & charging</td></tr>
+            <tr><td><code>wifi_status</code></td><td>WiFi network info</td></tr>
+            <tr><td><code>storage_status</code></td><td>Disk space</td></tr>
+            <tr><td><code>running_apps</code></td><td>List running apps</td></tr>
+            <tr><td><code>front_app</code></td><td>Get frontmost app</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Notes Tools -->
+      <section id="notes-tools">
+        <h2>notes</h2>
+        <p>Read and write Apple Notes.</p>
+
+        <table>
+          <thead>
+            <tr><th>tool</th><th>description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>notes_list</code></td><td>List recent notes</td></tr>
+            <tr><td><code>notes_search</code></td><td>Search notes by keyword</td></tr>
+            <tr><td><code>notes_create</code></td><td>Create a new note</td></tr>
+            <tr><td><code>notes_read</code></td><td>Read note content</td></tr>
+            <tr><td><code>notes_append</code></td><td>Append to existing note</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Files Tools -->
+      <section id="files-tools">
+        <h2>files</h2>
+        <p>Search and manage files via Finder.</p>
+
+        <table>
+          <thead>
+            <tr><th>tool</th><th>description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>finder_search</code></td><td>Search files by name</td></tr>
+            <tr><td><code>finder_downloads</code></td><td>List recent downloads</td></tr>
+            <tr><td><code>finder_desktop</code></td><td>List desktop files</td></tr>
+            <tr><td><code>finder_reveal</code></td><td>Reveal file in Finder</td></tr>
+            <tr><td><code>finder_trash</code></td><td>Move file to trash</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Shortcuts Tools -->
+      <section id="shortcuts-tools">
+        <h2>shortcuts</h2>
+        <p>Run Apple Shortcuts.</p>
+
+        <table>
+          <thead>
+            <tr><th>tool</th><th>description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>shortcut_run</code></td><td>Run a shortcut by name</td></tr>
+            <tr><td><code>shortcut_list</code></td><td>List available shortcuts</td></tr>
+          </tbody>
+        </table>
+
+        <div class="info">
+          <div class="info-title">tip</div>
+          <p>Create powerful automations in Shortcuts.app, then trigger them via SYSTEM. Example: "Run my Morning Routine shortcut"</p>
+        </div>
+      </section>
+
+      <!-- Browser Tools -->
+      <section id="browser-tools">
+        <h2>browser</h2>
+        <p>Get info from Safari, Chrome, Arc, or other browsers.</p>
+
+        <table>
+          <thead>
+            <tr><th>tool</th><th>description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>browser_url</code></td><td>Get current tab URL</td></tr>
+            <tr><td><code>browser_tabs</code></td><td>List open tabs</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Raycast Tools -->
+      <section id="raycast-tools">
+        <h2>raycast extensions</h2>
+        <p>Execute Raycast extensions for powerful integrations. SYSTEM scans your installed extensions and makes them available as tools.</p>
+
+        <h3>how it works</h3>
+        <p>During <code>npm run setup</code>, SYSTEM scans your Raycast extensions folder and presents compatible commands for you to enable. Each enabled command becomes a dedicated tool.</p>
+
+        <div class="diagram">
+<pre>
+Raycast Extension              SYSTEM Tool
+─────────────────              ───────────
+spotify-player/play      →     spotify_play
+linear/create-issue      →     linear_create_issue
+slack/send-message       →     slack_send_message
+</pre>
+        </div>
+
+        <h3>extension discovery</h3>
+        <p>SYSTEM looks in <code>~/.config/raycast/extensions/</code> and reads each extension's <code>package.json</code> to find commands. Only commands with <code>mode: "no-view"</code> or <code>mode: "view"</code> are compatible.</p>
+
+        <h3>compatible extension types</h3>
+        <table>
+          <thead>
+            <tr><th>type</th><th>works?</th><th>notes</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>No-view commands</td><td>✅ Best</td><td>Execute silently, return result</td></tr>
+            <tr><td>View commands</td><td>⚠️ Partial</td><td>Opens Raycast UI briefly</td></tr>
+            <tr><td>Form commands</td><td>❌ No</td><td>Requires user input in Raycast</td></tr>
+            <tr><td>Menu bar commands</td><td>❌ No</td><td>Background only</td></tr>
+          </tbody>
+        </table>
+
+        <h3>popular extensions that work well</h3>
+        <table>
+          <thead>
+            <tr><th>extension</th><th>commands</th><th>use case</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>spotify-player</code></td><td>play, pause, next, like</td><td>Music control</td></tr>
+            <tr><td><code>linear</code></td><td>create-issue, search</td><td>Issue tracking</td></tr>
+            <tr><td><code>slack</code></td><td>send-message, set-status</td><td>Team communication</td></tr>
+            <tr><td><code>todoist</code></td><td>create-task, today</td><td>Task management</td></tr>
+            <tr><td><code>github</code></td><td>create-issue, search</td><td>Code management</td></tr>
+            <tr><td><code>notion</code></td><td>create-page, search</td><td>Notes & docs</td></tr>
+          </tbody>
+        </table>
+
+        <h3>tool naming</h3>
+        <p>Tools are named as <code>{extension}_{command}</code> with hyphens replaced by underscores:</p>
+        <pre><code><span class="hl-comment">// Extension: linear, Command: create-issue-for-myself</span>
+Tool name: <span class="hl-string">linear_create_issue_for_myself</span>
+
+<span class="hl-comment">// Extension: spotify-player, Command: play</span>
+Tool name: <span class="hl-string">spotify_player_play</span></code></pre>
+
+        <h3>using raycast tools</h3>
+        <p>Once enabled, just ask naturally:</p>
+        <ul>
+          <li>"Create a Linear issue for fixing the login bug"</li>
+          <li>"Send a Slack message to #general saying hello"</li>
+          <li>"Play Daft Punk on Spotify"</li>
+          <li>"Add 'buy groceries' to my Todoist"</li>
+        </ul>
+
+        <h3>generic raycast tool</h3>
+        <p>For extensions not in your enabled list, use the generic <code>raycast</code> tool:</p>
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-path">raycast</span>
+            <span class="badge">fallback</span>
+          </div>
+          <div class="endpoint-body">
+            <pre><code>{
+  <span class="hl-property">"extension"</span>: <span class="hl-string">"spotify-player"</span>,
+  <span class="hl-property">"command"</span>: <span class="hl-string">"play"</span>,
+  <span class="hl-property">"arguments"</span>: { <span class="hl-property">"query"</span>: <span class="hl-string">"jazz"</span> }
+}</code></pre>
+          </div>
+        </div>
+
+        <h3>deep link format</h3>
+        <p>Under the hood, SYSTEM uses Raycast deep links:</p>
+        <pre><code>raycast://extensions/{author}/{extension}/{command}?arguments={json}</code></pre>
+
+        <h3>troubleshooting</h3>
+        
+        <div class="info warning">
+          <div class="info-title">extension not found</div>
+          <p>If an extension isn't showing in setup, make sure it's installed via Raycast Store, not manually. Check <code>~/.config/raycast/extensions/</code>.</p>
+        </div>
+
+        <div class="info warning">
+          <div class="info-title">command opens raycast but doesn't execute</div>
+          <p>This usually means the command requires UI interaction (forms, selections). These commands aren't fully compatible. Try a different command from the same extension.</p>
+        </div>
+
+        <div class="info warning">
+          <div class="info-title">authentication errors</div>
+          <p>Many extensions require you to authenticate in Raycast first. Open Raycast and run the command manually once to complete OAuth/login flows.</p>
+        </div>
+
+        <h3>re-scanning extensions</h3>
+        <p>If you install new Raycast extensions, run setup again to add them:</p>
+        <pre><code>npm run setup</code></pre>
+        <p>Your existing configuration will be preserved—you'll just see new extensions to enable.</p>
+      </section>
+
+      <!-- Bridge API -->
+      <section id="bridge">
+        <h2>bridge api</h2>
+        <p>Direct API to the local bridge. Used by the agent, but also available for custom integrations.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/tools</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">List all available tools on the bridge.</p>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/execute</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Execute a specific tool.</p>
+            <pre><code>{
+  <span class="hl-property">"tool"</span>: <span class="hl-string">"open_app"</span>,
+  <span class="hl-property">"args"</span>: { <span class="hl-property">"app"</span>: <span class="hl-string">"Safari"</span> }
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/health</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Check bridge status.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- WebSocket -->
+      <section id="websocket">
+        <h2>websocket</h2>
+        <p>Real-time updates for scheduled tasks and notifications.</p>
+
+        <pre><code><span class="hl-comment">// Connect to WebSocket</span>
+<span class="hl-keyword">const</span> ws = <span class="hl-keyword">new</span> WebSocket(<span class="hl-string">'wss://your-agent.workers.dev/ws?token=...'</span>);
+
+ws.onmessage = (event) => {
+  <span class="hl-keyword">const</span> data = JSON.parse(event.data);
+  <span class="hl-comment">// Types: scheduled_result, notification, bridge_status</span>
+  console.log(data.type, data.payload);
+};</code></pre>
+
+        <table>
+          <thead>
+            <tr><th>event type</th><th>description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>scheduled_result</code></td><td>Result of a scheduled task</td></tr>
+            <tr><td><code>notification</code></td><td>System notification</td></tr>
+            <tr><td><code>bridge_status</code></td><td>Bridge online/offline</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Security -->
+      <section id="security">
+        <h2>security</h2>
+        <p>SYSTEM is designed with security as a priority.</p>
+
+        <div class="security-grid">
+          <div class="security-item">
+            <h4>🔐 authentication</h4>
+            <p>Bearer token required for all requests. Tokens are generated during setup and stored locally.</p>
+          </div>
+          <div class="security-item">
+            <h4>🛡️ shell safety</h4>
+            <p>Only allowlisted commands can run. Dangerous patterns (rm -rf, sudo, etc.) are blocked.</p>
+          </div>
+          <div class="security-item">
+            <h4>🚇 tunnel security</h4>
+            <p>Quick Tunnels are ephemeral — new URL each session. Bridge binds to 0.0.0.0 only when tunnel is active.</p>
+          </div>
+          <div class="security-item">
+            <h4>👤 human-in-the-loop</h4>
+            <p>Sensitive actions like sending messages require explicit user confirmation.</p>
+          </div>
+        </div>
+
+        <h3>cloudflare access (recommended)</h3>
+        <p>If you deploy to Cloudflare Workers, <strong>add Cloudflare Access</strong> for Zero Trust authentication at the edge — before requests even reach your agent.</p>
+
+        <div class="info warning">
+          <div class="info-title">strongly recommended</div>
+          <p>While the API secret provides application-level auth, Cloudflare Access adds network-level protection. Only authenticated users can reach your agent at all.</p>
+        </div>
+
+        <h3>setup via dashboard</h3>
+        <ol>
+          <li>Go to <a href="https://one.dash.cloudflare.com" target="_blank">Cloudflare Zero Trust Dashboard</a></li>
+          <li>Navigate to <strong>Access → Applications → Add an application</strong></li>
+          <li>Select <strong>Self-hosted</strong> and enter your worker URL</li>
+          <li>Create an access policy (e.g., email = <code>you@example.com</code>)</li>
+          <li>Save — users must now authenticate before accessing SYSTEM</li>
+        </ol>
+
+        <h3>automation (terraform)</h3>
+        <pre><code><span class="hl-comment"># Note: wrangler doesn't support Access config directly</span>
+<span class="hl-comment"># Use Terraform for infrastructure-as-code</span>
+
+<span class="hl-keyword">resource</span> <span class="hl-string">"cloudflare_access_application"</span> <span class="hl-string">"system"</span> {
+  zone_id          = var.zone_id
+  name             = <span class="hl-string">"SYSTEM"</span>
+  domain           = <span class="hl-string">"your-agent.workers.dev"</span>
+  session_duration = <span class="hl-string">"24h"</span>
+}
+
+<span class="hl-keyword">resource</span> <span class="hl-string">"cloudflare_access_policy"</span> <span class="hl-string">"allow_me"</span> {
+  application_id = cloudflare_access_application.system.id
+  zone_id        = var.zone_id
+  name           = <span class="hl-string">"Allow specific emails"</span>
+  precedence     = <span class="hl-number">1</span>
+  decision       = <span class="hl-string">"allow"</span>
+
+  include {
+    email = [<span class="hl-string">"you@example.com"</span>]
+  }
+}</code></pre>
+
+        <div class="info">
+          <div class="info-title">note</div>
+          <p>Cloudflare Access is configured separately from Workers deployment. The <code>wrangler</code> CLI doesn't manage Access policies — use the dashboard or Terraform.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    // Active nav link
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.nav-link');
+    
+    function updateActiveLink() {
+      const scrollPos = window.scrollY + 100;
+      sections.forEach(section => {
+        const top = section.offsetTop;
+        const height = section.offsetHeight;
+        const id = section.getAttribute('id');
+        if (scrollPos >= top && scrollPos < top + height) {
+          navLinks.forEach(link => {
+            link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+          });
+        }
+      });
+    }
+    
+    window.addEventListener('scroll', updateActiveLink);
+    updateActiveLink();
+    
+    // Close mobile menu on link click
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.addEventListener('click', () => {
+        document.querySelector('.sidebar').classList.remove('open');
+      });
+    });
+  </script>
+</body>
+</html>

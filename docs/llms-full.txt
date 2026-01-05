@@ -1,0 +1,930 @@
+# SYSTEM — Complete Documentation
+
+> Remote Mac automation powered by AI. Control your Mac from anywhere using natural language.
+
+Repository: https://github.com/ygwyg/system
+License: MIT
+
+---
+
+## Table of Contents
+
+1. Overview
+2. Quick Start
+3. Architecture
+4. Authentication
+5. Agent API
+6. Bridge API
+7. Tools Reference
+8. Scheduling
+9. WebSocket
+10. Security
+11. Configuration
+12. Deployment
+13. Examples
+
+---
+
+## 1. Overview
+
+SYSTEM is an AI agent that controls your Mac remotely using natural language. It combines:
+
+- **Claude AI** for understanding intent
+- **Cloudflare Workers** for global edge deployment
+- **Durable Objects** for persistent state and scheduling
+- **Local Bridge** for executing commands on your Mac
+- **Cloudflare Tunnel** for secure remote access
+
+### What You Can Do
+
+- Control Apple Music playback
+- Send iMessages (with confirmation)
+- Open apps and URLs
+- Run AppleScript and safe shell commands
+- Manage calendar and reminders
+- Control system settings (volume, brightness, dark mode)
+- Take screenshots
+- Run Raycast extensions
+- Schedule one-time or recurring tasks
+
+### Tech Stack
+
+- **Agent**: Cloudflare Workers, Durable Objects, agents-sdk
+- **AI**: Claude (Anthropic API)
+- **Bridge**: Node.js, Express, TypeScript
+- **Tunnel**: Cloudflare Quick Tunnel (cloudflared)
+- **Tools**: AppleScript, shell, Raycast deep links
+
+---
+
+## 2. Quick Start
+
+### Prerequisites
+
+- macOS (for the bridge)
+- Node.js 18+
+- Anthropic API key
+- Cloudflare account (for deployment)
+- Optional: Raycast with extensions
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/ygwyg/system
+cd system
+
+# Install dependencies
+npm install
+
+# Run interactive setup wizard
+npm run setup
+
+# Start SYSTEM (bridge + tunnel + agent)
+npm start
+```
+
+### Setup Wizard
+
+The `npm run setup` command guides you through:
+
+1. **Raycast Extensions** — Select which extensions to enable
+2. **Anthropic API Key** — For Claude AI
+3. **Interface Mode** — UI or API only
+4. **Access Mode** — Local only or remote (via tunnel)
+5. **Cloudflare Deployment** — Optional: deploy agent to Workers
+
+### What Gets Created
+
+- `bridge.config.json` — Local configuration
+- `.dev.vars` — Cloudflare Worker secrets (gitignored)
+- Cloudflare Worker deployment (if enabled)
+
+---
+
+## 3. Architecture
+
+SYSTEM uses a split architecture for security:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                        USER                             │
+│                    (phone/browser)                      │
+└─────────────────────┬───────────────────────────────────┘
+                      │ HTTPS
+                      ▼
+┌─────────────────────────────────────────────────────────┐
+│                  AGENT (Brain)                          │
+│              Cloudflare Workers                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
+│  │   Claude    │  │   State     │  │  Schedules  │    │
+│  │     AI      │  │  (D.O.)     │  │   (D.O.)    │    │
+│  └─────────────┘  └─────────────┘  └─────────────┘    │
+└─────────────────────┬───────────────────────────────────┘
+                      │ HTTPS (via Tunnel)
+                      ▼
+┌─────────────────────────────────────────────────────────┐
+│                  BRIDGE (Body)                          │
+│                Your Mac (local)                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
+│  │ AppleScript │  │    Shell    │  │   Raycast   │    │
+│  │   Tools     │  │   Tools     │  │  Extensions │    │
+│  └─────────────┘  └─────────────┘  └─────────────┘    │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Agent (Brain)
+
+- Runs on Cloudflare Workers globally
+- Uses Durable Objects for persistent state
+- Processes natural language with Claude
+- Manages scheduling and memory
+- Handles WebSocket for real-time updates
+
+### Bridge (Body)
+
+- Runs locally on your Mac
+- Executes AppleScript, shell commands, Raycast
+- Exposes tools via REST API
+- Connected to agent via Cloudflare Tunnel
+
+### Request Flow
+
+1. User sends message to Agent
+2. Agent calls Claude with context and tools
+3. Claude decides which tools to call
+4. Agent calls Bridge to execute tools
+5. Bridge returns results
+6. Agent formats response and returns to user
+
+---
+
+## 4. Authentication
+
+### Agent Authentication
+
+All agent requests require an API secret:
+
+```http
+Authorization: Bearer <api_secret>
+```
+
+Or as query parameter:
+```
+?token=<api_secret>
+```
+
+The API secret is generated during `npm run setup` and stored in:
+- `bridge.config.json` (as `apiSecret`)
+- Cloudflare Worker (as `API_SECRET` secret)
+
+### Bridge Authentication
+
+The bridge uses a separate token for agent-to-bridge communication:
+
+```http
+Authorization: Bearer <bridge_auth_token>
+```
+
+This token is:
+- Generated during setup
+- Stored in `bridge.config.json` (as `authToken`)
+- Set as `BRIDGE_AUTH_TOKEN` secret on the Worker
+
+---
+
+## 5. Agent API
+
+Base URL: `https://your-agent.workers.dev`
+
+### POST /chat
+
+Send a natural language message.
+
+**Request:**
+```json
+{
+  "message": "Play some jazz music and set volume to 50%"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Playing jazz and setting volume to 50%",
+  "actions": [
+    {
+      "tool": "music_play",
+      "args": { "query": "jazz" },
+      "success": true,
+      "result": "Now playing: Jazz Vibes"
+    },
+    {
+      "tool": "volume_set",
+      "args": { "level": 50 },
+      "success": true,
+      "result": "Volume set to 50%"
+    }
+  ]
+}
+```
+
+### POST /reset
+
+Clear conversation history and agent state.
+
+**Response:**
+```json
+{
+  "message": "State reset successfully"
+}
+```
+
+### GET /schedules
+
+List all scheduled tasks.
+
+**Response:**
+```json
+{
+  "schedules": [
+    {
+      "id": "abc123",
+      "description": "Play closing time",
+      "scheduledAt": "2026-01-05T17:00:00Z",
+      "cron": "0 17 * * *",
+      "recurring": true
+    }
+  ]
+}
+```
+
+### DELETE /schedules/:id
+
+Cancel a scheduled task.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Schedule cancelled"
+}
+```
+
+### GET /state
+
+Get current agent state (for debugging).
+
+**Response:**
+```json
+{
+  "preferences": {
+    "wife": "Jane"
+  },
+  "historyLength": 12,
+  "scheduleCount": 2,
+  "pendingAction": null
+}
+```
+
+### GET /
+
+Agent status check.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "agent": "SYSTEM"
+}
+```
+
+---
+
+## 6. Bridge API
+
+Base URL: `http://localhost:3456`
+
+All bridge endpoints require `Authorization: Bearer <bridge_auth_token>`.
+
+### GET /tools
+
+List all available tools.
+
+**Response:**
+```json
+{
+  "tools": [
+    {
+      "name": "open_app",
+      "description": "Open an application",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app": { "type": "string", "description": "Application name" }
+        },
+        "required": ["app"]
+      }
+    }
+  ]
+}
+```
+
+### POST /execute
+
+Execute a specific tool.
+
+**Request:**
+```json
+{
+  "tool": "music_play",
+  "args": { "query": "jazz" }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "result": "Now playing: Jazz Vibes"
+}
+```
+
+For screenshot:
+```json
+{
+  "success": true,
+  "result": "Screenshot captured",
+  "image": {
+    "base64": "...",
+    "mimeType": "image/png"
+  }
+}
+```
+
+### GET /health
+
+Health check.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-01-05T12:00:00Z"
+}
+```
+
+---
+
+## 7. Tools Reference
+
+### Core Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `open_app` | Open an application | `app` (string) |
+| `open_url` | Open URL in default browser | `url` (string) |
+| `shell` | Execute safe shell command | `command` (string) |
+| `applescript` | Execute AppleScript | `script` (string) |
+| `notify` | Show macOS notification | `title`, `message` |
+| `say` | Text-to-speech | `text`, `voice?` |
+| `clipboard_get` | Get clipboard contents | — |
+| `clipboard_set` | Set clipboard contents | `text` (string) |
+| `screenshot` | Take screenshot | — |
+
+### Music Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `music_play` | Play or search music | `query?` (string) |
+| `music_pause` | Pause playback | — |
+| `music_next` | Skip to next track | — |
+| `music_previous` | Go to previous track | — |
+| `music_current` | Get current track info | — |
+| `volume_get` | Get current volume | — |
+| `volume_set` | Set volume level | `level` (0-100) |
+| `volume_up` | Increase volume by 10% | — |
+| `volume_down` | Decrease volume by 10% | — |
+| `volume_mute` | Toggle mute | — |
+
+### Messaging Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `search_contacts` | Search contacts by name | `query`, `message?` |
+| `send_imessage` | Send iMessage | `recipient`, `message` |
+
+**Note:** Messaging uses human-in-the-loop confirmation. The agent will:
+1. Search for the contact
+2. Present the match and message
+3. Wait for user confirmation before sending
+
+### Calendar Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `calendar_today` | Get today's events | — |
+| `calendar_upcoming` | Get upcoming events | `count?` (default: 5) |
+| `calendar_next` | Get next event | — |
+| `calendar_create` | Create calendar event | `title`, `start`, `end?`, `calendar?` |
+
+### Reminders Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `reminders_list` | List reminders | `list?` |
+| `reminders_create` | Create reminder | `title`, `list?`, `dueDate?` |
+| `reminders_complete` | Mark reminder complete | `title` |
+
+### System Status Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `battery_status` | Get battery level and charging status | — |
+| `wifi_status` | Get WiFi network info | — |
+| `storage_status` | Get disk space info | — |
+| `running_apps` | List running applications | — |
+| `front_app` | Get frontmost application | — |
+
+### Display Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `brightness_set` | Set display brightness | `level` (0-100) |
+| `dark_mode_toggle` | Toggle dark mode | — |
+| `dark_mode_status` | Get dark mode status | — |
+| `dnd_toggle` | Toggle Do Not Disturb | — |
+
+### Screen Control Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `lock_screen` | Lock the Mac | — |
+| `sleep_display` | Put display to sleep | — |
+| `sleep_mac` | Put Mac to sleep | — |
+
+### Notes Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `notes_list` | List recent notes | — |
+| `notes_search` | Search notes | `query` |
+| `notes_create` | Create new note | `title`, `body?`, `folder?` |
+| `notes_read` | Read note contents | `title` |
+| `notes_append` | Append text to note | `title`, `text` |
+
+### Files Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `finder_search` | Search for files | `query` |
+| `finder_downloads` | List Downloads folder | — |
+| `finder_desktop` | List Desktop folder | — |
+| `finder_reveal` | Reveal file in Finder | `path` |
+| `finder_trash` | Move file to trash | `path` |
+
+### Shortcuts Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `shortcut_run` | Run a Shortcut | `name`, `input?` |
+| `shortcut_list` | List available Shortcuts | — |
+
+### Browser Tools
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `browser_url` | Get current browser URL | — |
+| `browser_tabs` | List browser tabs | — |
+
+### Raycast Tools
+
+SYSTEM integrates with Raycast extensions, turning them into callable tools.
+
+#### How It Works
+
+During `npm run setup`, SYSTEM scans `~/.config/raycast/extensions/` and presents compatible commands. Each enabled command becomes a dedicated tool.
+
+```
+Raycast Extension              SYSTEM Tool
+─────────────────              ───────────
+spotify-player/play      →     spotify_play
+linear/create-issue      →     linear_create_issue
+slack/send-message       →     slack_send_message
+```
+
+#### Compatible Extension Types
+
+| Type | Works? | Notes |
+|------|--------|-------|
+| No-view commands | ✅ Best | Execute silently, return result |
+| View commands | ⚠️ Partial | Opens Raycast UI briefly |
+| Form commands | ❌ No | Requires user input in Raycast |
+| Menu bar commands | ❌ No | Background only |
+
+#### Popular Extensions That Work Well
+
+| Extension | Commands | Use Case |
+|-----------|----------|----------|
+| `spotify-player` | play, pause, next, like | Music control |
+| `linear` | create-issue, search | Issue tracking |
+| `slack` | send-message, set-status | Team communication |
+| `todoist` | create-task, today | Task management |
+| `github` | create-issue, search | Code management |
+| `notion` | create-page, search | Notes & docs |
+
+#### Tool Naming
+
+Tools are named as `{extension}_{command}` with hyphens replaced by underscores:
+
+```
+Extension: linear, Command: create-issue-for-myself
+Tool name: linear_create_issue_for_myself
+
+Extension: spotify-player, Command: play
+Tool name: spotify_player_play
+```
+
+#### Generic Raycast Tool
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `raycast` | Execute any Raycast extension | `extension`, `command`, `arguments?` |
+
+#### Deep Link Format
+
+Under the hood, SYSTEM uses Raycast deep links:
+```
+raycast://extensions/{author}/{extension}/{command}?arguments={json}
+```
+
+#### Troubleshooting
+
+**Extension not found:** Make sure it's installed via Raycast Store. Check `~/.config/raycast/extensions/`.
+
+**Command opens Raycast but doesn't execute:** The command likely requires UI interaction (forms, selections). Try a different command.
+
+**Authentication errors:** Many extensions require OAuth. Run the command manually in Raycast once to complete login.
+
+**Re-scanning extensions:** Run `npm run setup` again after installing new Raycast extensions.
+
+---
+
+## 8. Scheduling
+
+SYSTEM supports scheduling via natural language or cron syntax.
+
+### Natural Language Examples
+
+- "Remind me to call mom in 30 minutes"
+- "Every day at 5pm, play Closing Time"
+- "Tomorrow at 9am, open Linear"
+- "In 2 hours, send a notification to take a break"
+
+### Schedule Types
+
+**One-time:**
+- Executed once at specified time
+- Automatically removed after execution
+
+**Recurring (cron):**
+- Uses standard cron syntax
+- Persists until manually cancelled
+
+### How It Works
+
+1. Claude parses the scheduling intent
+2. Agent calls `schedule()` on the Durable Object
+3. Schedule is stored in persistent state
+4. At trigger time, action is executed
+5. Result is broadcast via WebSocket
+
+### Schedule Object
+
+```json
+{
+  "id": "unique-id",
+  "description": "Human-readable description",
+  "action": "The action to execute",
+  "scheduledAt": "2026-01-05T17:00:00Z",
+  "cron": "0 17 * * *",
+  "recurring": true
+}
+```
+
+---
+
+## 9. WebSocket
+
+Real-time updates for scheduled tasks and notifications.
+
+### Connection
+
+```javascript
+const ws = new WebSocket('wss://your-agent.workers.dev/ws?token=YOUR_API_SECRET');
+
+ws.onopen = () => {
+  console.log('Connected');
+  // Optionally send auth
+  ws.send(JSON.stringify({ type: 'auth', token: 'YOUR_API_SECRET' }));
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log(data.type, data.payload);
+};
+```
+
+### Event Types
+
+**scheduled_result:**
+```json
+{
+  "type": "scheduled_result",
+  "payload": {
+    "description": "Play closing time",
+    "success": true,
+    "result": "Now playing: Closing Time"
+  }
+}
+```
+
+**notification:**
+```json
+{
+  "type": "notification",
+  "payload": {
+    "title": "Reminder",
+    "message": "Time to take a break"
+  }
+}
+```
+
+**bridge_status:**
+```json
+{
+  "type": "bridge_status",
+  "payload": {
+    "online": true
+  }
+}
+```
+
+---
+
+## 10. Security
+
+### Authentication
+
+- **API Secret**: Required for all agent requests
+- **Bridge Token**: Separate token for agent-to-bridge communication
+- **Constant-time comparison**: Prevents timing attacks
+
+### Shell Command Safety
+
+The bridge allowlists safe commands and blocks dangerous patterns:
+
+**Allowed:**
+- `ls`, `cat`, `head`, `tail`, `grep`, `find`
+- `echo`, `date`, `uptime`, `whoami`
+- `open`, `pbcopy`, `pbpaste`
+- `which`, `type`, `file`
+
+**Blocked:**
+- `rm -rf`, `sudo`, `su`
+- `;`, `&&`, `||`, `|`, `>`, `<` (command chaining)
+- `/etc/passwd`, `/etc/shadow`
+- `curl | sh`, `wget | sh`
+
+### Human-in-the-Loop
+
+Sensitive actions require user confirmation:
+- Sending messages
+- Deleting files (planned)
+- System modifications (planned)
+
+### Tunnel Security
+
+- **Quick Tunnels**: Ephemeral URLs, new each session
+- **No persistent exposure**: Bridge only accessible when running
+- **HTTPS only**: All traffic encrypted
+
+### Cloudflare Access (Strongly Recommended)
+
+For deployed agents, add **Cloudflare Access** for Zero Trust authentication at the network edge — before requests even reach your worker.
+
+**Setup via Dashboard:**
+1. Go to [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com)
+2. Navigate to **Access → Applications → Add an application**
+3. Select **Self-hosted** and enter your worker URL
+4. Create an access policy (e.g., email = `you@example.com`)
+5. Save — users must now authenticate before accessing SYSTEM
+
+**Automation via Terraform:**
+```hcl
+resource "cloudflare_access_application" "system" {
+  zone_id          = var.zone_id
+  name             = "SYSTEM"
+  domain           = "your-agent.workers.dev"
+  session_duration = "24h"
+}
+
+resource "cloudflare_access_policy" "allow_me" {
+  application_id = cloudflare_access_application.system.id
+  zone_id        = var.zone_id
+  name           = "Allow specific emails"
+  precedence     = 1
+  decision       = "allow"
+
+  include {
+    email = ["you@example.com"]
+  }
+}
+```
+
+**Note:** The `wrangler` CLI doesn't manage Access policies — use the dashboard or Terraform.
+
+### Best Practices
+
+1. Keep `bridge.config.json` out of version control
+2. Use strong, random API secrets
+3. Don't share tunnel URLs publicly
+4. Review Raycast extensions before enabling
+5. Monitor bridge logs for suspicious activity
+6. **Enable Cloudflare Access for deployed agents**
+
+---
+
+## 11. Configuration
+
+### bridge.config.json
+
+```json
+{
+  "authToken": "bridge-auth-token",
+  "apiSecret": "agent-api-secret",
+  "raycastExtensions": [
+    {
+      "name": "spotify-player",
+      "owner": "mattisssa",
+      "commands": ["play", "pause"]
+    }
+  ],
+  "accessMode": "remote",
+  "interfaceMode": "ui",
+  "deployed": true,
+  "deployedUrl": "https://system-agent.workers.dev",
+  "cloudflareAccountId": "abc123"
+}
+```
+
+### Environment Variables (Agent)
+
+Set via `wrangler secret put`:
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Claude API key |
+| `BRIDGE_URL` | Bridge URL (updated on each tunnel start) |
+| `BRIDGE_AUTH_TOKEN` | Token for bridge auth |
+| `API_SECRET` | Token for agent auth |
+
+### .dev.vars (Local Development)
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+BRIDGE_URL=http://localhost:3456
+BRIDGE_AUTH_TOKEN=local-bridge-token
+API_SECRET=local-api-secret
+```
+
+---
+
+## 12. Deployment
+
+### Local Only
+
+No deployment needed. Just run:
+```bash
+npm start
+```
+
+Bridge runs at `localhost:3456`, UI at `localhost:5173`.
+
+### Remote Access (Recommended)
+
+1. Run `npm run setup` and select "remote" access
+2. Deploy agent to Cloudflare Workers
+3. Run `npm start` — creates tunnel automatically
+
+The tunnel URL is updated on the Worker each time you start.
+
+### Manual Deployment
+
+```bash
+# Build
+npm run build
+
+# Deploy agent
+cd cloudflare-agent
+npx wrangler deploy
+
+# Set secrets
+npx wrangler secret put ANTHROPIC_API_KEY
+npx wrangler secret put BRIDGE_AUTH_TOKEN
+npx wrangler secret put API_SECRET
+npx wrangler secret put BRIDGE_URL
+```
+
+---
+
+## 13. Examples
+
+### Control Music
+
+```
+User: "Play some lo-fi beats"
+Agent: Searching for "lo-fi beats" and playing...
+[music_play: Now playing: Lo-Fi Beats]
+```
+
+### Schedule Reminder
+
+```
+User: "Remind me to drink water every hour"
+Agent: I'll remind you to drink water every hour.
+[Scheduled: "0 * * * *" - Remind to drink water]
+```
+
+### Send Message (with confirmation)
+
+```
+User: "Text my wife that I'm running late"
+Agent: Found: Jane | Phone: (555) 123-4567
+       Send "I'm running late"? (yes/no)
+User: "yes"
+Agent: Message sent to Jane!
+```
+
+### System Status
+
+```
+User: "What's my battery at?"
+Agent: [battery_status]
+       Battery: 67%, Charging: Yes
+```
+
+### Run Shortcut
+
+```
+User: "Run my Morning Routine shortcut"
+Agent: [shortcut_run: Morning Routine]
+       Shortcut completed successfully
+```
+
+### Multi-tool Request
+
+```
+User: "Open Spotify, play jazz, and set volume to 30%"
+Agent: [open_app: Spotify]
+       [music_play: jazz]
+       [volume_set: 30]
+       Done! Spotify is open, playing jazz at 30% volume.
+```
+
+---
+
+## Building with AI
+
+SYSTEM is designed to be AI-friendly:
+
+1. **Natural language** — No commands to memorize
+2. **Context-aware** — Remembers preferences and history
+3. **Multi-tool** — Handles complex requests in one go
+4. **Extensible** — Add Raycast extensions for more tools
+
+### AI Integration Example
+
+```python
+import requests
+
+SYSTEM_URL = "https://your-agent.workers.dev"
+API_SECRET = "your-api-secret"
+
+def system_command(message):
+    response = requests.post(
+        f"{SYSTEM_URL}/chat",
+        headers={"Authorization": f"Bearer {API_SECRET}"},
+        json={"message": message}
+    )
+    return response.json()
+
+# Examples
+system_command("What's playing?")
+system_command("Turn on dark mode")
+system_command("Schedule a reminder for 5pm")
+```
+
+---
+
+End of documentation.
