@@ -9,6 +9,7 @@
 #   npx wrangler secret put AI_PROVIDER
 #   npx wrangler secret put ANTHROPIC_API_KEY  (if using Anthropic)
 #   npx wrangler secret put GITHUB_TOKEN       (if using GitHub Copilot)
+#   npx wrangler secret put COPILOT_MODEL      (if using GitHub Copilot)
 #   npx wrangler secret put BRIDGE_URL
 #   npx wrangler secret put BRIDGE_AUTH_TOKEN
 #   npx wrangler secret put API_SECRET
@@ -25,6 +26,11 @@ ANTHROPIC_API_KEY=sk-ant-your-key-here
 # For GitHub Copilot provider: Your GitHub token (from device flow auth)
 # Get one by running: npm run setup (and selecting GitHub Copilot)
 # GITHUB_TOKEN=gho_your-token-here
+
+# For GitHub Copilot provider: The model to use (selected during setup)
+# Examples: gpt-4o, claude-sonnet-4.5, gemini-2.5-pro
+# Run setup to see all available models from your Copilot subscription
+# COPILOT_MODEL=gpt-4o
 
 # Your bridge URL (local or tunnel)
 # Local: http://localhost:3000

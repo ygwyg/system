@@ -19,6 +19,7 @@ interface Config {
   anthropicKey?: string;
   githubToken?: string;
   aiProvider?: 'anthropic' | 'github';
+  copilotModel?: string;
   mode: 'ui' | 'api';
   access: 'local' | 'remote';
   deployed?: boolean;
@@ -187,6 +188,9 @@ AI_PROVIDER=${aiProvider}
     
     if (aiProvider === 'github' && config.githubToken) {
       devVars += `GITHUB_TOKEN=${config.githubToken}\n`;
+      if (config.copilotModel) {
+        devVars += `COPILOT_MODEL=${config.copilotModel}\n`;
+      }
     } else if (config.anthropicKey) {
       devVars += `ANTHROPIC_API_KEY=${config.anthropicKey}\n`;
     }

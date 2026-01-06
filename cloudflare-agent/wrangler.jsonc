@@ -35,6 +35,7 @@
   //
   // For GitHub Copilot provider:
   //   npx wrangler secret put GITHUB_TOKEN
+  //   npx wrangler secret put COPILOT_MODEL
   //   npx wrangler secret put AI_PROVIDER  (value: github)
   //
   // Common secrets:
@@ -44,6 +45,7 @@
   //
   // ANTHROPIC_API_KEY: Your Claude API key (sk-ant-...)
   // GITHUB_TOKEN: Your GitHub token (from device flow auth)
+  // COPILOT_MODEL: Model to use with Copilot (e.g. gpt-4o, claude-sonnet-4.5)
   // AI_PROVIDER: 'anthropic' or 'github'
   // BRIDGE_URL: Your tunnel URL (https://system.yourdomain.com)
   // BRIDGE_AUTH_TOKEN: Token to authenticate with your bridge

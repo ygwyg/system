@@ -36,12 +36,20 @@ interface Config {
   anthropicKey: string;
   githubToken?: string;
   aiProvider: 'anthropic' | 'github';
+  copilotModel?: string;
   mode: 'ui' | 'api';
   access: 'local' | 'remote';
   extensions: Extension[];
   deployed?: boolean;
   deployedUrl?: string;
   cloudflareAccountId?: string;
+}
+
+interface CopilotModel {
+  id: string;
+  name: string;
+  vendor: string;
+  supportsVision: boolean;
 }
 
 // GitHub Device Flow OAuth Client ID
@@ -350,10 +358,10 @@ async function askInput(label: string, placeholder = '', isSecret = false): Prom
   });
 }
 
-async function askChoice(question: string, options: string[]): Promise<number> {
+async function askChoice(question: string, options: string[], defaultIndex: number = 0): Promise<number> {
   const row = 13;
   const col = Math.floor((cols - 40) / 2);
-  let selected = 0;
+  let selected = defaultIndex;
   
   const draw = () => {
     moveTo(row, Math.floor((cols - question.length) / 2));
@@ -777,6 +785,73 @@ async function verifyGitHubCopilotAccess(token: string): Promise<boolean> {
   }
 }
 
+async function fetchCopilotModels(githubToken: string): Promise<CopilotModel[]> {
+  try {
+    // First get a Copilot API token
+    const tokenResponse = await fetch('https://api.github.com/copilot_internal/v2/token', {
+      headers: {
+        'Authorization': `token ${githubToken}`,
+        'Accept': 'application/json',
+        'User-Agent': 'GitHubCopilotChat/0.24.0',
+      },
+    });
+    
+    if (!tokenResponse.ok) {
+      return [];
+    }
+    
+    const tokenData = await tokenResponse.json() as { token: string };
+    
+    // Fetch available models
+    const modelsResponse = await fetch('https://api.githubcopilot.com/models', {
+      headers: {
+        'Authorization': `Bearer ${tokenData.token}`,
+        'Editor-Version': 'vscode/1.96.0',
+        'Editor-Plugin-Version': 'copilot-chat/0.24.0',
+        'User-Agent': 'GitHubCopilotChat/0.24.0',
+      },
+    });
+    
+    if (!modelsResponse.ok) {
+      return [];
+    }
+    
+    const data = await modelsResponse.json() as {
+      data: Array<{
+        id: string;
+        name: string;
+        vendor: string;
+        model_picker_enabled: boolean;
+        capabilities?: {
+          supports?: {
+            vision?: boolean;
+          };
+        };
+      }>;
+    };
+    
+    // Filter to only chat models that are enabled in the model picker and support /chat/completions
+    return data.data
+      .filter(m => m.model_picker_enabled)
+      .map(m => ({
+        id: m.id,
+        name: m.name,
+        vendor: m.vendor,
+        supportsVision: m.capabilities?.supports?.vision ?? false,
+      }))
+      // Sort by vendor, putting Claude/Anthropic first, then others
+      .sort((a, b) => {
+        const vendorOrder = ['Anthropic', 'OpenAI', 'Azure OpenAI', 'Google', 'xAI'];
+        const aOrder = vendorOrder.indexOf(a.vendor);
+        const bOrder = vendorOrder.indexOf(b.vendor);
+        if (aOrder !== bOrder) return (aOrder === -1 ? 999 : aOrder) - (bOrder === -1 ? 999 : bOrder);
+        return a.name.localeCompare(b.name);
+      });
+  } catch {
+    return [];
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Cloudflare Account Detection
 // ═══════════════════════════════════════════════════════════════
@@ -946,6 +1021,7 @@ async function main() {
     anthropicKey: existingConfig.anthropicKey || '',
     githubToken: existingConfig.githubToken || '',
     aiProvider: existingConfig.aiProvider || 'anthropic',
+    copilotModel: existingConfig.copilotModel || '',
     mode: existingConfig.mode || 'ui',
     access: existingConfig.access || 'local',
     extensions: existingConfig.extensions || [],
@@ -1076,6 +1152,41 @@ async function main() {
         
         config.aiProvider = 'anthropic';
         config.githubToken = '';
+      } else {
+        // Copilot verified - now let user select a model
+        await clearContent();
+        await drawStep(2, 5, 'AI Configuration', true);
+        
+        let models: CopilotModel[] = [];
+        await showProgress('Fetching available models...', async () => {
+          models = await fetchCopilotModels(config.githubToken!);
+          await sleep(300);
+        });
+        
+        if (models.length > 0) {
+          await clearContent();
+          await drawStep(2, 5, 'AI Configuration', true);
+          
+          // Create choice options with vendor info
+          const modelChoices = models.map(m => {
+            const vision = m.supportsVision ? ' (vision)' : '';
+            return `${m.name}${vision} - ${m.vendor}`;
+          });
+          
+          // Find default model (prefer Claude Sonnet 4.5 or first Claude model)
+          let defaultIndex = models.findIndex(m => m.id === 'claude-sonnet-4.5');
+          if (defaultIndex === -1) defaultIndex = models.findIndex(m => m.vendor === 'Anthropic');
+          if (defaultIndex === -1) defaultIndex = 0;
+          
+          const modelChoice = await askChoice('Select AI Model:', modelChoices, defaultIndex);
+          config.copilotModel = models[modelChoice].id;
+        } else {
+          // Fallback to a default model if we couldn't fetch the list
+          config.copilotModel = 'gpt-4o';
+          moveTo(13, Math.floor((cols - 45) / 2));
+          write(c.dim + 'Could not fetch models, using default (GPT-4o)' + c.reset);
+          await sleep(1500);
+        }
       }
     }
   }
@@ -1254,6 +1365,9 @@ async function main() {
               
               if (config.aiProvider === 'github' && config.githubToken) {
                 secrets.push(['GITHUB_TOKEN', config.githubToken]);
+                if (config.copilotModel) {
+                  secrets.push(['COPILOT_MODEL', config.copilotModel]);
+                }
               } else if (config.aiProvider === 'anthropic' && config.anthropicKey) {
                 secrets.push(['ANTHROPIC_API_KEY', config.anthropicKey]);
               }
@@ -1335,6 +1449,7 @@ async function main() {
     aiProvider: config.aiProvider,
     ...(config.aiProvider === 'anthropic' && { anthropicKey: config.anthropicKey }),
     ...(config.aiProvider === 'github' && { githubToken: config.githubToken }),
+    ...(config.aiProvider === 'github' && config.copilotModel && { copilotModel: config.copilotModel }),
     mode: config.mode,
     access: config.access,
     deployed: config.deployed,

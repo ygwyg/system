@@ -16,6 +16,7 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   GITHUB_TOKEN?: string;
   AI_PROVIDER?: 'anthropic' | 'github';
+  COPILOT_MODEL?: string;
   BRIDGE_URL: string;
   BRIDGE_AUTH_TOKEN: string;
   API_SECRET: string;
@@ -862,13 +863,13 @@ Be brief. Don't explain - just do it.`;
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${copilotToken}`,
-        "Editor-Version": "SYSTEM/1.0.0",
-        "Editor-Plugin-Version": "SYSTEM/1.0.0",
-        "User-Agent": "SYSTEM-Mac-Control/1.0",
+        "Editor-Version": "vscode/1.96.0",
+        "Editor-Plugin-Version": "copilot-chat/0.24.0",
+        "User-Agent": "GitHubCopilotChat/0.24.0",
         "Openai-Intent": "conversation-panel",
       },
       body: JSON.stringify({
-        model: "claude-3.5-sonnet", // Use Claude via GitHub Copilot
+        model: this.env.COPILOT_MODEL || "gpt-4o",
         max_tokens: 4096,
         messages: openaiMessages,
         stream: false,
@@ -981,13 +982,13 @@ Be brief. Don't explain - just do it.`;
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${copilotToken}`,
-        "Editor-Version": "SYSTEM/1.0.0",
-        "Editor-Plugin-Version": "SYSTEM/1.0.0",
-        "User-Agent": "SYSTEM-Mac-Control/1.0",
+        "Editor-Version": "vscode/1.96.0",
+        "Editor-Plugin-Version": "copilot-chat/0.24.0",
+        "User-Agent": "GitHubCopilotChat/0.24.0",
         "Openai-Intent": "conversation-panel",
       },
       body: JSON.stringify({
-        model: "claude-3.5-sonnet", // Claude supports vision via Copilot
+        model: this.env.COPILOT_MODEL || "gpt-4o",
         max_tokens: 4096,
         messages: visionMessages,
         stream: false,
