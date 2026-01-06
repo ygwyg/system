@@ -13,11 +13,19 @@ import { chatHTML } from "./ui";
 // ═══════════════════════════════════════════════════════════════
 
 export interface Env {
-  ANTHROPIC_API_KEY: string;
+  ANTHROPIC_API_KEY?: string;
+  GITHUB_TOKEN?: string;
+  AI_PROVIDER?: 'anthropic' | 'github';
   BRIDGE_URL: string;
   BRIDGE_AUTH_TOKEN: string;
   API_SECRET: string;
   SystemAgent: DurableObjectNamespace<SystemAgent>;
+}
+
+// GitHub Copilot token cache (tokens expire after ~30 minutes)
+interface CopilotToken {
+  token: string;
+  expiresAt: number;
 }
 
 type MessageContent = 
@@ -116,6 +124,7 @@ export class SystemAgent extends Agent<Env, SystemState> {
   private readonly RATE_LIMIT = 60;
   private readonly RATE_WINDOW = 60 * 1000;
   private connections: Map<string, Connection> = new Map();
+  private copilotToken: CopilotToken | null = null;
 
   // WebSocket handlers
   onConnect(connection: Connection, _ctx: ConnectionContext) {
@@ -781,11 +790,19 @@ Be brief. Don't explain - just do it.`;
   }
 
   async callClaude(systemPrompt: string, messages: Message[]): Promise<string> {
+    // Check which provider to use
+    const provider = this.env.AI_PROVIDER || (this.env.GITHUB_TOKEN ? 'github' : 'anthropic');
+    
+    if (provider === 'github' && this.env.GITHUB_TOKEN) {
+      return this.callGitHubCopilot(systemPrompt, messages);
+    }
+    
+    // Default to Anthropic
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": this.env.ANTHROPIC_API_KEY,
+        "x-api-key": this.env.ANTHROPIC_API_KEY!,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 4096, system: systemPrompt, messages }),
@@ -796,11 +813,92 @@ Be brief. Don't explain - just do it.`;
     return data.content[0]?.text || "No response";
   }
 
+  async getCopilotToken(): Promise<string> {
+    // Check if we have a valid cached token
+    if (this.copilotToken && Date.now() < this.copilotToken.expiresAt - 60000) {
+      return this.copilotToken.token;
+    }
+    
+    // Exchange GitHub token for Copilot token
+    const response = await fetch('https://api.github.com/copilot_internal/v2/token', {
+      headers: {
+        'Authorization': `token ${this.env.GITHUB_TOKEN}`,
+        'Accept': 'application/json',
+        'User-Agent': 'SYSTEM-Mac-Control/1.0',
+      },
+    });
+    
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to get Copilot token: ${response.status} - ${error}`);
+    }
+    
+    const data = await response.json() as { token: string; expires_at: number };
+    
+    this.copilotToken = {
+      token: data.token,
+      expiresAt: data.expires_at * 1000, // Convert to milliseconds
+    };
+    
+    return data.token;
+  }
+
+  async callGitHubCopilot(systemPrompt: string, messages: Message[]): Promise<string> {
+    const copilotToken = await this.getCopilotToken();
+    
+    // Convert messages to OpenAI format
+    const openaiMessages = [
+      { role: "system" as const, content: systemPrompt },
+      ...messages.map(m => ({
+        role: m.role as "user" | "assistant",
+        content: typeof m.content === 'string' 
+          ? m.content 
+          : m.content.map(c => c.type === 'text' ? c.text : '').join('')
+      }))
+    ];
+    
+    const response = await fetch("https://api.githubcopilot.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${copilotToken}`,
+        "Editor-Version": "SYSTEM/1.0.0",
+        "Editor-Plugin-Version": "SYSTEM/1.0.0",
+        "User-Agent": "SYSTEM-Mac-Control/1.0",
+        "Openai-Intent": "conversation-panel",
+      },
+      body: JSON.stringify({
+        model: "claude-3.5-sonnet", // Use Claude via GitHub Copilot
+        max_tokens: 4096,
+        messages: openaiMessages,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`GitHub Copilot API error: ${response.status} - ${error}`);
+    }
+    
+    const data = await response.json() as { 
+      choices: { message: { content: string } }[] 
+    };
+    return data.choices[0]?.message?.content || "No response";
+  }
+
   async callClaudeWithVision(
     systemPrompt: string, 
     userRequest: string,
     image: { data: string; mimeType: string }
   ): Promise<string> {
+    // Check which provider to use
+    const provider = this.env.AI_PROVIDER || (this.env.GITHUB_TOKEN ? 'github' : 'anthropic');
+    
+    if (provider === 'github' && this.env.GITHUB_TOKEN) {
+      return this.callGitHubCopilotWithVision(systemPrompt, userRequest, image);
+    }
+    
+    // Default to Anthropic
     // Create a simple message with the user's request and the screenshot image
     // The image is attached to a new user message asking Claude to analyze it
     const visionMessages = [
@@ -829,7 +927,7 @@ Be brief. Don't explain - just do it.`;
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": this.env.ANTHROPIC_API_KEY,
+        "x-api-key": this.env.ANTHROPIC_API_KEY!,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({ 
@@ -847,6 +945,65 @@ Be brief. Don't explain - just do it.`;
     }
     const data = await response.json() as { content: { text: string }[] };
     return data.content[0]?.text || "No response";
+  }
+
+  async callGitHubCopilotWithVision(
+    systemPrompt: string, 
+    userRequest: string,
+    image: { data: string; mimeType: string }
+  ): Promise<string> {
+    const copilotToken = await this.getCopilotToken();
+    
+    // OpenAI-compatible vision format
+    const visionMessages = [
+      { role: "system" as const, content: systemPrompt },
+      {
+        role: "user" as const,
+        content: [
+          {
+            type: "image_url" as const,
+            image_url: {
+              url: `data:${image.mimeType};base64,${image.data}`,
+            },
+          },
+          {
+            type: "text" as const,
+            text: userRequest 
+              ? `The user asked: "${userRequest}"\n\nHere is the screenshot I just took. Please describe what you see and address the user's request.`
+              : "Here is a screenshot I just took. Please describe what you see."
+          },
+        ],
+      },
+    ];
+
+    const response = await fetch("https://api.githubcopilot.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${copilotToken}`,
+        "Editor-Version": "SYSTEM/1.0.0",
+        "Editor-Plugin-Version": "SYSTEM/1.0.0",
+        "User-Agent": "SYSTEM-Mac-Control/1.0",
+        "Openai-Intent": "conversation-panel",
+      },
+      body: JSON.stringify({
+        model: "claude-3.5-sonnet", // Claude supports vision via Copilot
+        max_tokens: 4096,
+        messages: visionMessages,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`GitHub Copilot Vision API error: ${response.status}`, errorText);
+      throw new Error(`GitHub Copilot Vision API error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json() as { 
+      choices: { message: { content: string } }[] 
+    };
+    return data.choices[0]?.message?.content || "No response";
   }
 
   async fetchTools(): Promise<Tool[]> {

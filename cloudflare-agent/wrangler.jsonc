@@ -29,12 +29,22 @@
   // 
   // Run these commands to set your secrets:
   //
+  // For Anthropic provider:
   //   npx wrangler secret put ANTHROPIC_API_KEY
+  //   npx wrangler secret put AI_PROVIDER  (value: anthropic)
+  //
+  // For GitHub Copilot provider:
+  //   npx wrangler secret put GITHUB_TOKEN
+  //   npx wrangler secret put AI_PROVIDER  (value: github)
+  //
+  // Common secrets:
   //   npx wrangler secret put BRIDGE_URL
   //   npx wrangler secret put BRIDGE_AUTH_TOKEN
   //   npx wrangler secret put API_SECRET
   //
   // ANTHROPIC_API_KEY: Your Claude API key (sk-ant-...)
+  // GITHUB_TOKEN: Your GitHub token (from device flow auth)
+  // AI_PROVIDER: 'anthropic' or 'github'
   // BRIDGE_URL: Your tunnel URL (https://system.yourdomain.com)
   // BRIDGE_AUTH_TOKEN: Token to authenticate with your bridge
   // API_SECRET: Token for UI access (generate with: openssl rand -hex 16)

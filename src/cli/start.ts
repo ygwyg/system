@@ -16,7 +16,9 @@ import { spawn, ChildProcess, execSync } from 'child_process';
 
 interface Config {
   authToken: string;
-  anthropicKey: string;
+  anthropicKey?: string;
+  githubToken?: string;
+  aiProvider?: 'anthropic' | 'github';
   mode: 'ui' | 'api';
   access: 'local' | 'remote';
   deployed?: boolean;
@@ -173,12 +175,21 @@ async function updateDeployedBridgeUrl(bridgeUrl: string, accountId?: string): P
 
 async function startAgent(config: Config, bridgeUrl: string): Promise<void> {
   return new Promise((resolve, reject) => {
+    // Determine AI provider and credentials
+    const aiProvider = config.aiProvider || (config.githubToken ? 'github' : 'anthropic');
+    
     // Write .dev.vars for local agent
-    const devVars = `ANTHROPIC_API_KEY=${config.anthropicKey}
-BRIDGE_URL=${bridgeUrl}
+    let devVars = `BRIDGE_URL=${bridgeUrl}
 BRIDGE_AUTH_TOKEN=${config.authToken}
 API_SECRET=${config.authToken.slice(0, 32)}
+AI_PROVIDER=${aiProvider}
 `;
+    
+    if (aiProvider === 'github' && config.githubToken) {
+      devVars += `GITHUB_TOKEN=${config.githubToken}\n`;
+    } else if (config.anthropicKey) {
+      devVars += `ANTHROPIC_API_KEY=${config.anthropicKey}\n`;
+    }
     
     const agentDir = join(process.cwd(), 'cloudflare-agent');
     writeFileSync(join(agentDir, '.dev.vars'), devVars);
@@ -283,8 +294,12 @@ async function main() {
     process.exit(1);
   }
   
-  if (!config.anthropicKey) {
-    log(`${c.red}Error: No Anthropic API key in config${c.reset}`);
+  const hasValidAI = (config.aiProvider === 'github' && config.githubToken) || 
+                      (config.aiProvider === 'anthropic' && config.anthropicKey) ||
+                      config.anthropicKey; // Legacy support
+  
+  if (!hasValidAI) {
+    log(`${c.red}Error: No AI credentials in config${c.reset}`);
     log(`${c.dim}Run: npm run setup${c.reset}`);
     process.exit(1);
   }

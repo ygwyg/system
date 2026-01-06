@@ -34,6 +34,8 @@ interface Extension {
 interface Config {
   authToken: string;
   anthropicKey: string;
+  githubToken?: string;
+  aiProvider: 'anthropic' | 'github';
   mode: 'ui' | 'api';
   access: 'local' | 'remote';
   extensions: Extension[];
@@ -41,6 +43,10 @@ interface Config {
   deployedUrl?: string;
   cloudflareAccountId?: string;
 }
+
+// GitHub Device Flow OAuth Client ID
+// This is a public client ID for device flow (CLI applications)
+const GITHUB_CLIENT_ID = 'Iv1.b507a08c87ecfe98'; // VS Code Copilot extension client ID
 
 // ═══════════════════════════════════════════════════════════════
 // Terminal Utils
@@ -634,6 +640,144 @@ async function selectExtensions(extensions: Extension[]): Promise<Extension[]> {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// GitHub Device Flow Authentication
+// ═══════════════════════════════════════════════════════════════
+
+interface DeviceCodeResponse {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
+}
+
+interface TokenResponse {
+  access_token?: string;
+  token_type?: string;
+  scope?: string;
+  error?: string;
+  error_description?: string;
+}
+
+async function startGitHubDeviceFlow(): Promise<DeviceCodeResponse> {
+  const response = await fetch('https://github.com/login/device/code', {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: `client_id=${GITHUB_CLIENT_ID}&scope=copilot`,
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Failed to start device flow: ${response.status}`);
+  }
+  
+  return response.json() as Promise<DeviceCodeResponse>;
+}
+
+async function pollForToken(deviceCode: string, interval: number, expiresIn: number): Promise<string> {
+  const startTime = Date.now();
+  const expiresAt = startTime + (expiresIn * 1000);
+  let pollInterval = interval * 1000;
+  
+  while (Date.now() < expiresAt) {
+    await sleep(pollInterval);
+    
+    const response = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `client_id=${GITHUB_CLIENT_ID}&device_code=${deviceCode}&grant_type=urn:ietf:params:oauth:grant-type:device_code`,
+    });
+    
+    const data = await response.json() as TokenResponse;
+    
+    if (data.access_token) {
+      return data.access_token;
+    }
+    
+    if (data.error === 'slow_down') {
+      pollInterval += 5000;
+    } else if (data.error === 'expired_token') {
+      throw new Error('Device code expired. Please try again.');
+    } else if (data.error === 'access_denied') {
+      throw new Error('Access denied. Please try again.');
+    }
+    // authorization_pending - continue polling
+  }
+  
+  throw new Error('Authentication timed out. Please try again.');
+}
+
+async function authenticateWithGitHub(): Promise<string> {
+  // Start device flow
+  const deviceFlow = await startGitHubDeviceFlow();
+  
+  // Display the user code to the user
+  const row = 13;
+  const boxWidth = 50;
+  const labelCol = Math.floor((cols - boxWidth) / 2);
+  
+  moveTo(row, labelCol);
+  write(c.white + 'Open this URL in your browser:' + c.reset);
+  
+  moveTo(row + 2, labelCol);
+  write(c.green + c.bold + deviceFlow.verification_uri + c.reset);
+  
+  moveTo(row + 4, labelCol);
+  write(c.white + 'Enter this code:' + c.reset);
+  
+  // Draw the code in a nice box
+  const codeBoxWidth = 14;
+  const codeCol = Math.floor((cols - codeBoxWidth) / 2);
+  moveTo(row + 6, codeCol);
+  write(c.gray + '┌' + safeRepeat('─', codeBoxWidth - 2) + '┐' + c.reset);
+  moveTo(row + 7, codeCol);
+  write(c.gray + '│ ' + c.greenBright + c.bold + deviceFlow.user_code + c.gray + ' │' + c.reset);
+  moveTo(row + 8, codeCol);
+  write(c.gray + '└' + safeRepeat('─', codeBoxWidth - 2) + '┘' + c.reset);
+  
+  moveTo(row + 10, Math.floor((cols - 35) / 2));
+  write(c.dim + 'Waiting for authorization...' + c.reset);
+  
+  // Try to open the URL automatically
+  try {
+    execSync(`open "${deviceFlow.verification_uri}"`, { stdio: 'ignore' });
+  } catch {
+    // Ignore if we can't open the browser
+  }
+  
+  // Poll for the token
+  const token = await pollForToken(deviceFlow.device_code, deviceFlow.interval, deviceFlow.expires_in);
+  
+  return token;
+}
+
+async function verifyGitHubCopilotAccess(token: string): Promise<boolean> {
+  try {
+    // First, get a Copilot token from the GitHub token
+    const response = await fetch('https://api.github.com/copilot_internal/v2/token', {
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/json',
+        'User-Agent': 'SYSTEM-Mac-Control/1.0',
+      },
+    });
+    
+    if (!response.ok) {
+      return false;
+    }
+    
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Cloudflare Account Detection
 // ═══════════════════════════════════════════════════════════════
 
@@ -800,6 +944,8 @@ async function main() {
   const config: Config = {
     authToken: existingConfig.authToken || randomBytes(32).toString('hex'),
     anthropicKey: existingConfig.anthropicKey || '',
+    githubToken: existingConfig.githubToken || '',
+    aiProvider: existingConfig.aiProvider || 'anthropic',
     mode: existingConfig.mode || 'ui',
     access: existingConfig.access || 'local',
     extensions: existingConfig.extensions || [],
@@ -856,35 +1002,115 @@ async function main() {
   
   await sleep(1000);
   
-  // ─── Step 2: Anthropic API Key ───
+  // ─── Step 2: AI Provider Selection ───
   await clearContent();
   await drawStep(2, 5, 'AI Configuration', true);
   
-  if (config.anthropicKey) {
-    const keepKey = await askYesNo('Keep existing Anthropic API key?', true);
-    if (!keepKey) {
+  const providerChoice = await askChoice('Select AI Provider:', [
+    'GitHub Copilot (uses your subscription)',
+    'Anthropic API (requires API key)',
+  ]);
+  
+  config.aiProvider = providerChoice === 0 ? 'github' : 'anthropic';
+  
+  await clearContent();
+  await drawStep(2, 5, 'AI Configuration', true);
+  
+  if (config.aiProvider === 'github') {
+    // GitHub Copilot authentication via Device Flow
+    if (config.githubToken) {
+      const keepToken = await askYesNo('Keep existing GitHub token?', true);
+      if (!keepToken) {
+        await clearContent();
+        await drawStep(2, 5, 'AI Configuration', true);
+        
+        try {
+          config.githubToken = await authenticateWithGitHub();
+        } catch (e) {
+          await clearContent();
+          await drawStep(2, 5, 'AI Configuration', true);
+          await showError(e instanceof Error ? e.message : 'Authentication failed');
+          config.aiProvider = 'anthropic';
+          config.githubToken = '';
+        }
+      }
+    } else {
+      try {
+        config.githubToken = await authenticateWithGitHub();
+      } catch (e) {
+        await clearContent();
+        await drawStep(2, 5, 'AI Configuration', true);
+        await showError(e instanceof Error ? e.message : 'Authentication failed');
+        
+        // Fall back to Anthropic
+        moveTo(16, Math.floor((cols - 40) / 2));
+        write(c.dim + 'Falling back to Anthropic API...' + c.reset);
+        await sleep(1500);
+        config.aiProvider = 'anthropic';
+        config.githubToken = '';
+      }
+    }
+    
+    if (config.githubToken) {
+      // Verify Copilot access
+      await clearContent();
+      await drawStep(2, 5, 'AI Configuration', true);
+      
+      let hasCopilot = false;
+      await showProgress('Verifying Copilot access...', async () => {
+        hasCopilot = await verifyGitHubCopilotAccess(config.githubToken!);
+        await sleep(300);
+      });
+      
+      if (!hasCopilot) {
+        await clearContent();
+        await drawStep(2, 5, 'AI Configuration', true);
+        
+        moveTo(13, Math.floor((cols - 50) / 2));
+        write(c.yellow + '⚠ ' + c.white + 'GitHub Copilot subscription not found' + c.reset);
+        moveTo(15, Math.floor((cols - 55) / 2));
+        write(c.dim + 'You need an active Copilot subscription to use this.' + c.reset);
+        moveTo(17, Math.floor((cols - 40) / 2));
+        write(c.dim + 'Falling back to Anthropic API...' + c.reset);
+        await sleep(2500);
+        
+        config.aiProvider = 'anthropic';
+        config.githubToken = '';
+      }
+    }
+  }
+  
+  // If using Anthropic (either by choice or fallback)
+  if (config.aiProvider === 'anthropic') {
+    await clearContent();
+    await drawStep(2, 5, 'AI Configuration', true);
+    
+    if (config.anthropicKey) {
+      const keepKey = await askYesNo('Keep existing Anthropic API key?', true);
+      if (!keepKey) {
+        await clearContent();
+        await drawStep(2, 5, 'AI Configuration', true);
+        config.anthropicKey = await askInput('Anthropic API Key', 'sk-ant-...', true);
+      }
+    } else {
+      config.anthropicKey = await askInput('Anthropic API Key', 'sk-ant-...', true);
+    }
+    
+    // Validate
+    if (!config.anthropicKey.startsWith('sk-ant-')) {
+      await clearContent();
+      await drawStep(2, 5, 'AI Configuration', true);
+      await showError('Invalid key format (should start with sk-ant-)');
+      await sleep(500);
       await clearContent();
       await drawStep(2, 5, 'AI Configuration', true);
       config.anthropicKey = await askInput('Anthropic API Key', 'sk-ant-...', true);
     }
-  } else {
-    config.anthropicKey = await askInput('Anthropic API Key', 'sk-ant-...', true);
-  }
-  
-  // Validate
-  if (!config.anthropicKey.startsWith('sk-ant-')) {
-    await clearContent();
-    await drawStep(2, 5, 'AI Configuration', true);
-    await showError('Invalid key format (should start with sk-ant-)');
-    await sleep(500);
-    await clearContent();
-    await drawStep(2, 5, 'AI Configuration', true);
-    config.anthropicKey = await askInput('Anthropic API Key', 'sk-ant-...', true);
   }
   
   await clearContent();
   await drawStep(2, 5, 'AI Configuration', true);
-  await showSuccess('API key configured');
+  await showSuccess(config.aiProvider === 'github' ? 'GitHub Copilot connected' : 'API key configured');
   await sleep(800);
   
   // ─── Step 3: Interface Mode ───
@@ -1020,11 +1246,17 @@ async function main() {
             await drawStep(5, 5, 'Deploy', true);
             
             await showProgress('Setting secrets...', async () => {
-              const secrets = [
-                ['ANTHROPIC_API_KEY', config.anthropicKey],
+              const secrets: [string, string][] = [
                 ['BRIDGE_AUTH_TOKEN', config.authToken],
                 ['API_SECRET', config.authToken.slice(0, 32)],
+                ['AI_PROVIDER', config.aiProvider],
               ];
+              
+              if (config.aiProvider === 'github' && config.githubToken) {
+                secrets.push(['GITHUB_TOKEN', config.githubToken]);
+              } else if (config.aiProvider === 'anthropic' && config.anthropicKey) {
+                secrets.push(['ANTHROPIC_API_KEY', config.anthropicKey]);
+              }
               
               for (const [key, value] of secrets) {
                 try {
@@ -1100,7 +1332,9 @@ async function main() {
   
   writeFileSync(configPath, JSON.stringify({
     authToken: config.authToken,
-    anthropicKey: config.anthropicKey,
+    aiProvider: config.aiProvider,
+    ...(config.aiProvider === 'anthropic' && { anthropicKey: config.anthropicKey }),
+    ...(config.aiProvider === 'github' && { githubToken: config.githubToken }),
     mode: config.mode,
     access: config.access,
     deployed: config.deployed,

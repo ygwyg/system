@@ -6,14 +6,25 @@
 #   cp .dev.vars.example .dev.vars
 #
 # For production, use wrangler secrets instead:
-#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler secret put AI_PROVIDER
+#   npx wrangler secret put ANTHROPIC_API_KEY  (if using Anthropic)
+#   npx wrangler secret put GITHUB_TOKEN       (if using GitHub Copilot)
 #   npx wrangler secret put BRIDGE_URL
 #   npx wrangler secret put BRIDGE_AUTH_TOKEN
 #   npx wrangler secret put API_SECRET
 # ═══════════════════════════════════════════════════════════════
 
-# Your Anthropic API key (get one at https://console.anthropic.com)
+# AI Provider: 'anthropic' or 'github'
+# - anthropic: Uses direct Anthropic API (requires ANTHROPIC_API_KEY)
+# - github: Uses GitHub Copilot API (requires GITHUB_TOKEN + Copilot subscription)
+AI_PROVIDER=anthropic
+
+# For Anthropic provider: Your API key (get one at https://console.anthropic.com)
 ANTHROPIC_API_KEY=sk-ant-your-key-here
+
+# For GitHub Copilot provider: Your GitHub token (from device flow auth)
+# Get one by running: npm run setup (and selecting GitHub Copilot)
+# GITHUB_TOKEN=gho_your-token-here
 
 # Your bridge URL (local or tunnel)
 # Local: http://localhost:3000
