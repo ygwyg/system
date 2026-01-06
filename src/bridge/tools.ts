@@ -1,6 +1,6 @@
 import open from 'open';
 import { z } from 'zod';
-import { readFileSync, existsSync, unlinkSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { spawn } from 'child_process';
 import { tmpdir } from 'os';
@@ -1793,6 +1793,22 @@ export const systemTools: SystemTool[] = [
     }
   },
   {
+    name: 'wait',
+    description: 'Wait/sleep for a specified number of seconds before continuing. Use this when you need to wait for an app to load or for a delay between actions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        seconds: { type: 'number', description: 'Number of seconds to wait (max 30)' }
+      },
+      required: ['seconds']
+    },
+    handler: async (args) => {
+      const seconds = Math.min(30, Math.max(0.1, Number(args.seconds) || 1));
+      await new Promise(resolve => setTimeout(resolve, seconds * 1000));
+      return { content: [{ type: 'text', text: `Waited ${seconds} seconds` }] };
+    }
+  },
+  {
     name: 'clipboard_get',
     description: 'Get the current clipboard contents',
     inputSchema: { type: 'object', properties: {} },
@@ -1894,6 +1910,7 @@ export const systemTools: SystemTool[] = [
     handler: async (args) => {
       const type = args.type === 'window' ? 'window' : 'full';
       const tmpFile = join(tmpdir(), `screenshot-${Date.now()}.png`);
+      const resizedFile = join(tmpdir(), `screenshot-resized-${Date.now()}.jpg`);
       
       try {
         // Take screenshot using macOS screencapture
@@ -1910,23 +1927,49 @@ export const systemTools: SystemTool[] = [
           proc.on('error', reject);
         });
         
-        // Read the file and convert to base64
-        const imageBuffer = readFileSync(tmpFile);
+        // Resize image to fit within Claude's 5MB limit using sips (built into macOS)
+        // Resize to max 1920px width and convert to JPEG for smaller file size
+        await new Promise<void>((resolve, reject) => {
+          const proc = spawn('sips', [
+            '--resampleWidth', '1920',
+            '--setProperty', 'format', 'jpeg',
+            '--setProperty', 'formatOptions', '80',  // 80% quality
+            tmpFile,
+            '--out', resizedFile
+          ], { timeout: 10000 });
+          proc.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`sips resize failed with code ${code}`));
+          });
+          proc.on('error', reject);
+        });
+        
+        // Read the resized file and convert to base64
+        const imageBuffer = readFileSync(resizedFile);
         const base64Image = imageBuffer.toString('base64');
         
-        // Clean up temp file
+        // Save a copy to a dedicated folder for easy sharing/cleanup
+        const screenshotDir = join(process.env.HOME || '/tmp', 'Pictures', 'SYSTEM Screenshots');
+        try { mkdirSync(screenshotDir, { recursive: true }); } catch {}
+        const savedPath = join(screenshotDir, `screenshot-${Date.now()}.jpg`);
+        try { writeFileSync(savedPath, imageBuffer); } catch {}
+        
+        // Clean up temp files
         try { unlinkSync(tmpFile); } catch {}
+        try { unlinkSync(resizedFile); } catch {}
         
         return { 
           content: [{ 
             type: 'image', 
             data: base64Image,
-            mimeType: 'image/png'
-          }] 
+            mimeType: 'image/jpeg'
+          }],
+          savedTo: savedPath
         };
       } catch (error) {
         // Clean up on error too
         try { unlinkSync(tmpFile); } catch {}
+        try { unlinkSync(resizedFile); } catch {}
         return { 
           content: [{ type: 'text', text: `Screenshot failed: ${error instanceof Error ? error.message : 'Unknown error'}` }], 
           isError: true 

@@ -20,9 +20,13 @@ export interface Env {
   SystemAgent: DurableObjectNamespace<SystemAgent>;
 }
 
+type MessageContent = 
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+
 interface Message {
   role: "user" | "assistant";
-  content: string;
+  content: string | MessageContent[];
 }
 
 interface Tool {
@@ -60,6 +64,12 @@ interface SystemState {
   pendingAction?: PendingAction;
   rateLimit?: RateLimit;
   scheduleRegistry: ScheduleRecord[];
+  lastScreenshot?: {
+    data: string;
+    mimeType: string;
+    description: string;
+    timestamp: number;
+  };
 }
 
 interface ScheduledAction {
@@ -401,6 +411,40 @@ export class SystemAgent extends Agent<Env, SystemState> {
       if (result.image) actionResult.image = result.image;
       actionResults.push(actionResult);
       
+      // Screenshot taken - send image to Claude for analysis
+      if (action.tool === 'screenshot' && result.success && result.image) {
+        // Ask Claude to analyze the screenshot
+        const analysis = await this.callClaudeWithVision(
+          `You are SYSTEM, an AI assistant that controls a Mac remotely. You CAN send iMessages, control apps, take screenshots, etc.
+
+You just took a screenshot. Your ONLY job right now is to describe what you see in the image accurately and concisely.
+
+DO NOT:
+- Say you cannot do things (you are SYSTEM, you have full Mac control)
+- Refuse requests or lecture about capabilities
+- Add caveats about AI limitations
+
+JUST describe what's visible in the screenshot. Keep it brief.`,
+          message,
+          result.image
+        );
+        
+        // Store the screenshot so user can reference it later ("send that to...")
+        this.setState({
+          ...this.state,
+          history: [...this.state.history, { role: "user" as const, content: message }, { role: "assistant" as const, content: analysis }].slice(-50),
+          lastActive: Date.now(),
+          lastScreenshot: {
+            data: result.image.data,
+            mimeType: result.image.mimeType,
+            description: analysis,
+            timestamp: Date.now(),
+          },
+        });
+        
+        return { message: analysis, actions: actionResults };
+      }
+      
       // Contact search -> message flow (human-in-the-loop)
       if (action.tool === 'search_contacts' && result.success && result.result && !result.result.toLowerCase().includes('error')) {
         const phoneMatch = result.result.match(/[\+]?1?[\s\-\.]?\(?\d{3}\)?[\s\-\.]?\d{3}[\s\-\.]?\d{4}/);
@@ -580,10 +624,17 @@ export class SystemAgent extends Agent<Env, SystemState> {
       : "";
     const prefs = Object.entries(this.state.preferences).map(([k, v]) => `- ${k}: ${v}`).join("\n") || "None";
     
+    // Check if there's a recent screenshot (within last 5 minutes)
+    const hasRecentScreenshot = this.state.lastScreenshot && 
+      (Date.now() - this.state.lastScreenshot.timestamp) < 5 * 60 * 1000;
+    const screenshotContext = hasRecentScreenshot 
+      ? `\n\nLAST SCREENSHOT (taken ${Math.round((Date.now() - this.state.lastScreenshot!.timestamp) / 1000)}s ago):\n${this.state.lastScreenshot!.description}\n\nNOTE: Screenshots are saved to ~/Pictures/SYSTEM Screenshots/. If user wants to share it, let them know where to find it. Do NOT take a new screenshot unless they specifically ask for one.`
+      : "";
+    
     return `You are SYSTEM, a personal AI assistant that controls a Mac remotely. Be helpful and concise.
 
 USER PREFERENCES:
-${prefs}
+${prefs}${screenshotContext}
 
 AVAILABLE TOOLS:
 ${coreDesc}${extDesc}
@@ -623,6 +674,7 @@ SHORTCUTS: shortcut_run, shortcut_list
 BROWSER: browser_url, browser_tabs
 APPS: open_app, open_url
 OTHER: screenshot, notify, say, clipboard_get, clipboard_set
+TIMING: wait (for seconds-based delays in immediate sequences)
 
 ===== ACTION FORMAT =====
 
@@ -646,19 +698,37 @@ Raycast extensions with arguments:
 {"tool": "spotify_player_justPlay", "args": {"query": "Bohemian Rhapsody"}}
 \`\`\`
 
-===== SCHEDULING =====
+===== WAITING vs SCHEDULING =====
 
-For future tasks, use schedule blocks (not action blocks):
+⚠️ SCHEDULES CAN ONLY RUN ONE TOOL - for sequences, use multiple action blocks with wait!
 
-\`\`\`schedule
-{"when": "in 5 minutes", "tool": "notify", "args": {"message": "Hi"}, "description": "Reminder"}
+IMMEDIATE SEQUENCES - use action blocks with wait tool:
+User: "in 3 seconds open figma" or "wait 3 seconds then screenshot" →
+\`\`\`action
+{"tool": "wait", "args": {"seconds": 3}}
+\`\`\`
+\`\`\`action
+{"tool": "open_app", "args": {"name": "Figma"}}
 \`\`\`
 
-\`\`\`schedule
-{"when": "every day at 5pm", "tool": "music_play", "args": {"query": "chill"}, "description": "Daily music"}
+User: "open figma, wait 2 seconds, take screenshot" →
+\`\`\`action
+{"tool": "open_app", "args": {"name": "Figma"}}
+\`\`\`
+\`\`\`action
+{"tool": "wait", "args": {"seconds": 2}}
+\`\`\`
+\`\`\`action
+{"tool": "screenshot", "args": {}}
 \`\`\`
 
-Supported: "in X minutes/hours", "every day at Xpm", "every morning/evening", "every hour", "every weekday at X", cron syntax
+BACKGROUND REMINDERS ONLY - use schedule (single tool, runs later):
+User: "remind me in 5 minutes" or "every day at 9am play music" →
+\`\`\`schedule
+{"when": "in 5 minutes", "tool": "notify", "args": {"message": "Reminder"}, "description": "Reminder"}
+\`\`\`
+
+RULE: If user wants multiple things to happen in sequence, ALWAYS use action blocks with wait. Never use schedule for sequences!
 
 ===== PREFERENCES =====
 \`\`\`preference
@@ -722,6 +792,59 @@ Be brief. Don't explain - just do it.`;
     });
 
     if (!response.ok) throw new Error(`Claude API error: ${response.status}`);
+    const data = await response.json() as { content: { text: string }[] };
+    return data.content[0]?.text || "No response";
+  }
+
+  async callClaudeWithVision(
+    systemPrompt: string, 
+    userRequest: string,
+    image: { data: string; mimeType: string }
+  ): Promise<string> {
+    // Create a simple message with the user's request and the screenshot image
+    // The image is attached to a new user message asking Claude to analyze it
+    const visionMessages = [
+      {
+        role: "user",
+        content: [
+          { 
+            type: "image", 
+            source: { 
+              type: "base64", 
+              media_type: image.mimeType, 
+              data: image.data 
+            } 
+          },
+          { 
+            type: "text", 
+            text: userRequest 
+              ? `The user asked: "${userRequest}"\n\nHere is the screenshot I just took. Please describe what you see and address the user's request.`
+              : "Here is a screenshot I just took. Please describe what you see."
+          }
+        ]
+      }
+    ];
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": this.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({ 
+        model: "claude-sonnet-4-20250514", 
+        max_tokens: 4096, 
+        system: systemPrompt, 
+        messages: visionMessages 
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Claude Vision API error: ${response.status}`, errorText);
+      throw new Error(`Claude Vision API error: ${response.status} - ${errorText}`);
+    }
     const data = await response.json() as { content: { text: string }[] };
     return data.content[0]?.text || "No response";
   }
