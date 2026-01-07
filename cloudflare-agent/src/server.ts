@@ -610,20 +610,34 @@ JUST describe what's visible in the screenshot. Keep it brief.`,
     );
     const extensionTools = tools.filter(t => !coreTools.includes(t) && t.name.includes('_') && t.name !== 'send_imessage');
     
-    // Intent-specific guidance
+    // Intent-specific guidance - VERY STRONG hints
     const intentGuidance: Record<string, string> = {
-      messages_read: `\n⚡ INTENT DETECTED: Reading messages. Use read_imessages tool. Do NOT use search_contacts (that's for sending).`,
-      messages_send: `\n⚡ INTENT DETECTED: Sending a message. Use search_contacts to find the contact, then confirm before sending.`,
-      music: `\n⚡ INTENT DETECTED: Music control. Use music_* tools or raycast_search for Spotify.`,
-      system: `\n⚡ INTENT DETECTED: System control. Use appropriate system tools (volume, brightness, battery, screenshot, etc.)`,
-      calendar: `\n⚡ INTENT DETECTED: Calendar. Use calendar_* tools.`,
-      reminders: `\n⚡ INTENT DETECTED: Reminders. Use reminders_* tools.`,
-      notes: `\n⚡ INTENT DETECTED: Notes. Use notes_* tools.`,
-      files: `\n⚡ INTENT DETECTED: Files. Use finder_* tools.`,
-      apps: `\n⚡ INTENT DETECTED: App control. Use open_app tool.`,
-      web: `\n⚡ INTENT DETECTED: Web/social. Use open_url or raycast_search.`,
-      raycast: `\n⚡ INTENT DETECTED: General automation. Consider using raycast_search.`,
-      conversation: `\n⚡ INTENT DETECTED: Conversation. Just respond naturally, no tools needed.`,
+      messages_read: `
+
+███████████████████████████████████████████████████████████████
+█ CRITICAL: USER WANTS TO READ MESSAGES                       █
+█ USE: read_imessages tool                                    █
+█ DO NOT USE: search_contacts (that is ONLY for sending)      █
+███████████████████████████████████████████████████████████████
+`,
+      messages_send: `
+
+███████████████████████████████████████████████████████████████
+█ CRITICAL: USER WANTS TO SEND A MESSAGE                      █
+█ USE: search_contacts tool (it handles the send flow)        █
+█ DO NOT USE: read_imessages (that is ONLY for reading)       █
+███████████████████████████████████████████████████████████████
+`,
+      music: `\n⚡ INTENT: Music control. Use music_* tools or raycast_search for Spotify.`,
+      system: `\n⚡ INTENT: System control. Use appropriate system tools.`,
+      calendar: `\n⚡ INTENT: Calendar. Use calendar_* tools.`,
+      reminders: `\n⚡ INTENT: Reminders. Use reminders_* tools.`,
+      notes: `\n⚡ INTENT: Notes. Use notes_* tools.`,
+      files: `\n⚡ INTENT: Files. Use finder_* tools.`,
+      apps: `\n⚡ INTENT: App control. Use open_app tool.`,
+      web: `\n⚡ INTENT: Web/social. Use open_url or raycast_search.`,
+      raycast: `\n⚡ INTENT: General automation. Consider using raycast_search.`,
+      conversation: `\n⚡ INTENT: Conversation. Just respond naturally, no tools needed.`,
     };
     
     const intentHint = intent && intentGuidance[intent] ? intentGuidance[intent] : '';
@@ -668,19 +682,15 @@ IMPORTANT: For Raycast extensions, use the EXACT tool name from the list above (
 MUSIC: music_play, music_pause, music_next, music_previous, music_current
 VOLUME: volume_up, volume_down, volume_set, volume_mute, volume_get
 MESSAGING (iMessage/SMS):
-  READ vs SEND - pick the right one!
-  
-  📖 READING messages (what did X say, show messages from X, last messages):
-     → Use read_imessages tool directly
-     → Example: "what did my wife text me?" → read_imessages with from: "Meghan" (from preferences)
-  
-  ✉️ SENDING messages (text X, tell X, send X a message):
-     → Use search_contacts flow (finds contact, confirms before sending)
-     → Rewrite message from sender's perspective: "tell her I love her" → "I love you"
-  
-  KEYWORDS:
-  - "read", "show", "what did", "last messages", "check messages" → read_imessages
-  - "text", "send", "tell", "message X saying" → search_contacts (send flow)
+  ┌─────────────────────────────────────────────────────────────┐
+  │ READ MESSAGES: read_imessages                               │
+  │   "what did X say", "show messages", "last texts from X"    │
+  │   Args: {from: "contact name", limit: 10}                   │
+  │                                                             │
+  │ SEND MESSAGES: search_contacts                              │
+  │   "text X", "tell X", "send message to X"                   │
+  │   Args: {query: "contact name", message: "the message"}     │
+  └─────────────────────────────────────────────────────────────┘
 CALENDAR: calendar_today, calendar_upcoming, calendar_next, calendar_create
 REMINDERS: reminders_list, reminders_create, reminders_complete
 SYSTEM: battery_status, wifi_status, storage_status, running_apps, front_app

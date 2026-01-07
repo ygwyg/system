@@ -773,6 +773,274 @@ async function showProgress(message: string, task: () => Promise<void>): Promise
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Permissions Management
+// ═══════════════════════════════════════════════════════════════
+
+interface PermissionCheck {
+  name: string;
+  urlScheme: string;
+  test: () => boolean;
+  reason: string;
+}
+
+function getTerminalAppName(): string {
+  // Detect what terminal/app is running the script
+  const termProgram = process.env.TERM_PROGRAM || '';
+  
+  if (termProgram.includes('iTerm')) return 'iTerm';
+  if (termProgram.includes('Apple_Terminal')) return 'Terminal';
+  if (termProgram.includes('vscode') || termProgram.includes('Code')) return 'Visual Studio Code';
+  if (termProgram.includes('cursor')) return 'Cursor';
+  if (termProgram.includes('Warp')) return 'Warp';
+  
+  // Check via process tree
+  try {
+    let pid = process.ppid;
+    for (let i = 0; i < 5; i++) { // Walk up to 5 levels
+      const comm = execSync(`ps -p ${pid} -o comm=`, { encoding: 'utf-8' }).trim();
+      const name = comm.split('/').pop() || '';
+      
+      if (name.includes('Terminal')) return 'Terminal';
+      if (name.includes('iTerm')) return 'iTerm';
+      if (name.includes('Code')) return 'Visual Studio Code';
+      if (name.includes('cursor')) return 'Cursor';
+      if (name.includes('opencode')) return 'OpenCode';
+      if (name.includes('Warp')) return 'Warp';
+      if (name.includes('Hyper')) return 'Hyper';
+      if (name.includes('Alacritty')) return 'Alacritty';
+      if (name.includes('kitty')) return 'kitty';
+      
+      // Get parent's parent
+      const ppid = execSync(`ps -p ${pid} -o ppid=`, { encoding: 'utf-8' }).trim();
+      if (!ppid || ppid === '1' || ppid === '0') break;
+      pid = parseInt(ppid);
+    }
+  } catch {}
+  
+  return 'Terminal';
+}
+
+function getTerminalAppPath(): string {
+  const name = getTerminalAppName();
+  const paths: Record<string, string> = {
+    'Terminal': '/System/Applications/Utilities/Terminal.app',
+    'iTerm': '/Applications/iTerm.app',
+    'Visual Studio Code': '/Applications/Visual Studio Code.app',
+    'Cursor': '/Applications/Cursor.app',
+    'OpenCode': '/Applications/OpenCode.app',
+    'Warp': '/Applications/Warp.app',
+    'Hyper': '/Applications/Hyper.app',
+    'Alacritty': '/Applications/Alacritty.app',
+    'kitty': '/Applications/kitty.app',
+  };
+  return paths[name] || paths['Terminal'];
+}
+
+function checkFullDiskAccess(): boolean {
+  // Try to read the Messages database - this requires Full Disk Access
+  try {
+    const dbPath = join(homedir(), 'Library', 'Messages', 'chat.db');
+    execSync(`sqlite3 "${dbPath}" "SELECT 1 LIMIT 1" 2>/dev/null`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function checkAccessibility(): boolean {
+  // Try an accessibility action - if it works, we have permission
+  try {
+    execSync(`osascript -e 'tell application "System Events" to return name of first process' 2>/dev/null`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function checkContacts(): boolean {
+  try {
+    execSync(`osascript -e 'tell application "Contacts" to return count of people' 2>/dev/null`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function requestPermission(
+  name: string,
+  urlScheme: string, 
+  testFn: () => boolean,
+  reason: string
+): Promise<boolean> {
+  const terminalApp = getTerminalAppName();
+  const boxWidth = 56;
+  const boxX = Math.floor((cols - boxWidth) / 2);
+  
+  // Check if already granted
+  if (testFn()) {
+    return true;
+  }
+  
+  // Show permission request
+  moveTo(10, Math.floor((cols - 30) / 2));
+  write(c.yellow + '⚠ ' + c.white + c.bold + name + ' Required' + c.reset);
+  
+  moveTo(12, boxX);
+  write(c.dim + reason + c.reset);
+  
+  moveTo(14, boxX);
+  write(c.white + 'Add ' + c.green + c.bold + terminalApp + c.reset + c.white + ' to ' + name + c.reset);
+  
+  // Open System Settings
+  moveTo(16, boxX);
+  write(c.dim + 'Opening System Settings...' + c.reset);
+  
+  try {
+    execSync(`open "${urlScheme}"`, { stdio: 'ignore' });
+  } catch {}
+  
+  await sleep(500);
+  
+  moveTo(16, boxX);
+  write(c.white + '1. Click the ' + c.green + '+' + c.white + ' button' + c.reset + '                    ');
+  moveTo(17, boxX);
+  write(c.white + '2. Select ' + c.green + terminalApp + c.reset + '                    ');
+  moveTo(18, boxX);
+  write(c.white + '3. Enable the toggle' + c.reset);
+  
+  moveTo(20, boxX);
+  write(c.dim + 'Waiting for permission...' + c.reset);
+  
+  // Poll for permission (check every 2 seconds, timeout after 60s)
+  const startTime = Date.now();
+  const timeout = 60000;
+  let dots = 0;
+  
+  while (Date.now() - startTime < timeout) {
+    if (testFn()) {
+      moveTo(20, boxX);
+      write(c.green + '✓ ' + c.bright + name + ' granted!' + c.reset + '                    ');
+      await sleep(1000);
+      return true;
+    }
+    
+    // Update waiting animation
+    dots = (dots + 1) % 4;
+    moveTo(20, boxX);
+    write(c.dim + 'Waiting for permission' + '.'.repeat(dots) + ' '.repeat(3 - dots) + c.reset);
+    
+    await sleep(2000);
+  }
+  
+  // Timeout - ask to skip or retry
+  moveTo(20, boxX);
+  write(c.yellow + '⚠ Permission not detected' + c.reset + '                    ');
+  
+  moveTo(22, boxX);
+  const shouldRetry = await askYesNo('Retry?', true);
+  
+  if (shouldRetry) {
+    await clearContent();
+    return requestPermission(name, urlScheme, testFn, reason);
+  }
+  
+  return false;
+}
+
+async function showPermissionsGuide(): Promise<void> {
+  const terminalApp = getTerminalAppName();
+  
+  // Check and request permissions in order of importance
+  const permissions: Array<{
+    name: string;
+    urlScheme: string;
+    test: () => boolean;
+    reason: string;
+    critical: boolean;
+  }> = [
+    {
+      name: 'Full Disk Access',
+      urlScheme: 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles',
+      test: checkFullDiskAccess,
+      reason: 'Required to read iMessages and access files',
+      critical: true,
+    },
+    {
+      name: 'Accessibility',
+      urlScheme: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+      test: checkAccessibility,
+      reason: 'Required for keyboard/mouse control and Raycast',
+      critical: true,
+    },
+    {
+      name: 'Contacts',
+      urlScheme: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts',
+      test: checkContacts,
+      reason: 'Allows looking up contacts by name',
+      critical: false,
+    },
+  ];
+  
+  // Quick check - if critical permissions are already granted, skip
+  const missingCritical = permissions.filter(p => p.critical && !p.test());
+  
+  if (missingCritical.length === 0) {
+    // All critical permissions granted
+    moveTo(12, Math.floor((cols - 30) / 2));
+    write(c.green + '✓ ' + c.bright + 'Permissions configured' + c.reset);
+    await sleep(800);
+    return;
+  }
+  
+  // Show intro
+  moveTo(10, Math.floor((cols - 40) / 2));
+  write(c.white + c.bold + 'macOS Permissions Setup' + c.reset);
+  
+  moveTo(12, Math.floor((cols - 50) / 2));
+  write(c.dim + `SYSTEM needs permissions to control your Mac.` + c.reset);
+  
+  moveTo(13, Math.floor((cols - 45) / 2));
+  write(c.dim + `You'll add "${c.green}${terminalApp}${c.dim}" to each setting.` + c.reset);
+  
+  moveTo(15, Math.floor((cols - 25) / 2));
+  write(c.dim + 'Press any key to start...' + c.reset);
+  
+  await new Promise<void>((resolve) => {
+    const handler = (key: Buffer) => {
+      if (key.toString() === '\x03') { showCursor(); process.exit(0); }
+      process.stdin.removeListener('data', handler);
+      process.stdin.setRawMode(false);
+      resolve();
+    };
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.on('data', handler);
+  });
+  
+  // Request each permission
+  for (const perm of permissions) {
+    await clearContent();
+    await drawLogo();
+    
+    const granted = await requestPermission(perm.name, perm.urlScheme, perm.test, perm.reason);
+    
+    if (!granted && perm.critical) {
+      await clearContent();
+      moveTo(12, Math.floor((cols - 45) / 2));
+      write(c.yellow + '⚠ ' + c.white + perm.name + ' is required for full functionality' + c.reset);
+      moveTo(14, Math.floor((cols - 40) / 2));
+      write(c.dim + 'Some features may not work without it.' + c.reset);
+      await sleep(2000);
+    }
+  }
+  
+  await clearContent();
+  moveTo(12, Math.floor((cols - 25) / 2));
+  write(c.green + '✓ ' + c.bright + 'Permissions configured' + c.reset);
+  await sleep(800);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Main Setup Flow
 // ═══════════════════════════════════════════════════════════════
 
@@ -855,6 +1123,11 @@ async function main() {
   }
   
   await sleep(1000);
+  
+  // ─── Step 1b: Permissions Check ───
+  await clearContent();
+  await showPermissionsGuide();
+  await sleep(500);
   
   // ─── Step 2: Anthropic API Key ───
   await clearContent();

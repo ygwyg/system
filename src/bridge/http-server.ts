@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import express from 'express';
-import { allTools } from './tools.js';
+import { allTools } from './tools/index.js';
 import { ZodError } from 'zod';
 import { randomBytes } from 'crypto';
 import { readFileSync, existsSync } from 'fs';

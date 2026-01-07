@@ -9,6 +9,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { spawn, ChildProcess, execSync } from 'child_process';
+import { homedir } from 'os';
 
 // ═══════════════════════════════════════════════════════════════
 // Types
@@ -255,6 +256,42 @@ function showStatus(services: { name: string; status: string; url?: string }[]) 
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Permissions Check
+// ═══════════════════════════════════════════════════════════════
+
+function checkFullDiskAccess(): boolean {
+  try {
+    const dbPath = join(homedir(), 'Library', 'Messages', 'chat.db');
+    execSync(`sqlite3 "${dbPath}" "SELECT 1 LIMIT 1" 2>/dev/null`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function showPermissionWarning() {
+  log('');
+  log(`${c.yellow}┌─────────────────────────────────────────────────────────┐${c.reset}`);
+  log(`${c.yellow}│${c.reset} ${c.yellow}⚠${c.reset}  ${c.white}Full Disk Access not granted${c.reset}                         ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}                                                         ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}    iMessage reading will not work until you:            ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}                                                         ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}    1. Open System Settings → Privacy & Security         ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}    2. Click "Full Disk Access"                          ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}    3. Add Terminal (or your terminal app)               ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}    4. Restart this terminal and run npm start again     ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}                                                         ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}└─────────────────────────────────────────────────────────┘${c.reset}`);
+  log('');
+  
+  // Offer to open System Settings
+  log(`${c.dim}Opening System Settings...${c.reset}`);
+  try {
+    execSync('open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"', { stdio: 'ignore' });
+  } catch {}
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Main
 // ═══════════════════════════════════════════════════════════════
 
@@ -287,6 +324,14 @@ async function main() {
     log(`${c.red}Error: No Anthropic API key in config${c.reset}`);
     log(`${c.dim}Run: npm run setup${c.reset}`);
     process.exit(1);
+  }
+  
+  // Check permissions
+  if (!checkFullDiskAccess()) {
+    showPermissionWarning();
+    log(`${c.dim}Continuing anyway... (some features will be limited)${c.reset}`);
+    log('');
+    await sleep(3000);
   }
   
   // Determine what to start
