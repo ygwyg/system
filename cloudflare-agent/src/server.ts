@@ -522,22 +522,6 @@ export class SystemAgent extends Agent<Env, SystemState> {
       return Response.json({ success: true, message: "All conversations cleared, preferences kept" });
     }
     
-    // Get state (debug)
-    if (path.endsWith("/state") && request.method === "GET") {
-      this.migrateIfNeeded();
-      const activeConv = this.state.activeConversationId 
-        ? this.state.conversations[this.state.activeConversationId] 
-        : null;
-      return Response.json({
-        conversationCount: Object.keys(this.state.conversations).length,
-        activeConversationId: this.state.activeConversationId,
-        activeHistoryLength: activeConv?.history.length || 0,
-        preferences: this.state.preferences,
-        pendingAction: activeConv?.pendingAction,
-        lastActive: this.state.lastActive,
-      });
-    }
-    
     // Execute tool directly
     if (path.endsWith("/execute") && request.method === "POST") {
       return this.handleExecute(request);
