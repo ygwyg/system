@@ -1,7 +1,7 @@
 /**
  * SYSTEM Chat UI
  * 
- * A minimal terminal-style interface.
+ * A minimal terminal-style interface with conversation history.
  */
 
 export const chatHTML = `<!DOCTYPE html>
@@ -29,6 +29,7 @@ export const chatHTML = `<!DOCTYPE html>
       --green-dim: #354;
       --red: #a54;
       --purple: #a5a;
+      --sidebar-width: 260px;
     }
 
     html, body { height: 100%; overflow: hidden; }
@@ -62,7 +63,22 @@ export const chatHTML = `<!DOCTYPE html>
       justify-content: space-between;
       flex-shrink: 0;
       background: var(--bg);
+      z-index: 10;
     }
+
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .menu-btn {
+      display: none;
+      padding: 6px;
+      background: transparent;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+    }
+    .menu-btn:hover { color: var(--text); border-color: var(--border-bright); }
+    @media (max-width: 768px) { .menu-btn { display: block; } }
 
     .logo { font-weight: 500; color: var(--text-bright); letter-spacing: -0.5px; }
     .header-actions { display: flex; align-items: center; gap: 8px; }
@@ -87,7 +103,7 @@ export const chatHTML = `<!DOCTYPE html>
     /* Auth */
     .auth { flex: 1; display: flex; flex-direction: column; }
     .auth.hidden { display: none; }
-    .auth:not(.hidden) ~ .main { display: none; }
+    .auth:not(.hidden) ~ .main-wrapper { display: none; }
 
     .auth-content {
       flex: 1;
@@ -171,8 +187,140 @@ export const chatHTML = `<!DOCTYPE html>
     .auth-footer a { color: var(--text); text-decoration: none; }
     .auth-footer a:hover { color: var(--text-bright); }
 
-    /* Main */
-    .main { flex: 1; display: flex; overflow: hidden; position: relative; }
+    /* Main Layout with Sidebar */
+    .main-wrapper { flex: 1; display: flex; overflow: hidden; }
+    
+    /* Sidebar */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        z-index: 200;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+      }
+      .sidebar.visible { transform: translateX(0); }
+      .sidebar-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 199;
+        display: none;
+      }
+      .sidebar-overlay.visible { display: block; }
+    }
+    
+    .sidebar-header {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sidebar-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); }
+    .sidebar-close {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px;
+    }
+    .sidebar-close:hover { color: var(--text); }
+    @media (max-width: 768px) { .sidebar-close { display: block; } }
+    
+    .new-chat-btn {
+      margin: 12px;
+      padding: 10px;
+      background: var(--bg-subtle);
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-family: inherit;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .new-chat-btn:hover { background: var(--border); color: var(--text-bright); border-color: var(--border-bright); }
+    
+    .conversations-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    
+    .conv-item {
+      padding: 10px 12px;
+      margin-bottom: 4px;
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      transition: all 0.15s;
+    }
+    .conv-item:hover { background: var(--bg-subtle); border-color: var(--border); }
+    .conv-item.active { background: var(--bg-subtle); border-color: var(--green-dim); }
+    .conv-item.active .conv-title { color: var(--green); }
+    
+    .conv-title {
+      font-size: 12px;
+      color: var(--text-bright);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .conv-preview {
+      font-size: 10px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .conv-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 4px;
+    }
+    .conv-time { font-size: 9px; color: var(--text-dim); }
+    .conv-delete {
+      opacity: 0;
+      background: none;
+      border: none;
+      color: var(--red);
+      font-size: 12px;
+      cursor: pointer;
+      padding: 2px 4px;
+      transition: opacity 0.15s;
+    }
+    .conv-item:hover .conv-delete { opacity: 0.6; }
+    .conv-delete:hover { opacity: 1 !important; }
+    
+    .conversations-empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 11px;
+    }
+
+    /* Main Chat Area */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
     .chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
     .chat.hidden { display: none; }
 
@@ -200,7 +348,7 @@ export const chatHTML = `<!DOCTYPE html>
     .msg.system .msg-who { color: var(--red); }
     .msg-text { flex: 1; min-width: 0; word-wrap: break-word; color: var(--text); }
     .msg.user .msg-text { color: var(--text-bright); }
-    .msg.typing .msg-text::after { content: '▌'; animation: blink 1s infinite; color: var(--green); }
+    .msg.typing .msg-text::after { content: '|'; animation: blink 1s infinite; color: var(--green); }
     @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
 
     .tool-call { margin: 8px 0; padding: 8px 12px; background: var(--bg-subtle); border: 1px solid var(--border); font-size: 11px; }
@@ -248,7 +396,7 @@ export const chatHTML = `<!DOCTYPE html>
       border: none;
       color: var(--text-bright);
       font-family: inherit;
-      font-size: 16px; /* 16px prevents iOS zoom on focus */
+      font-size: 16px;
       line-height: 20px;
       resize: none;
       outline: none;
@@ -258,11 +406,9 @@ export const chatHTML = `<!DOCTYPE html>
     }
     #input::placeholder { color: var(--text-dim); }
     
-    /* Mobile keyboard handling */
-    @supports (height: 100dvh) {
-      .app { height: 100dvh; }
-    }
+    @supports (height: 100dvh) { .app { height: 100dvh; } }
 
+    /* Schedules Panel (slides from right) */
     .schedules-panel {
       position: absolute;
       top: 0; right: 0; bottom: 0;
@@ -293,9 +439,11 @@ export const chatHTML = `<!DOCTYPE html>
 </head>
 <body>
   <header>
-    <div class="logo">SYSTEM</div>
+    <div class="header-left">
+      <button class="menu-btn" id="menu-btn">&#9776;</button>
+      <div class="logo">SYSTEM</div>
+    </div>
     <div class="header-actions auth-hidden" id="header-actions">
-      <button class="header-btn" id="new-btn" title="New conversation">new</button>
       <button class="header-btn" id="schedule-btn" title="View schedules">cron</button>
       <button class="header-btn" id="disconnect-btn" title="Disconnect">exit</button>
       <div class="status" id="status"><span class="status-dot"></span><span>connected</span></div>
@@ -314,52 +462,72 @@ export const chatHTML = `<!DOCTYPE html>
     </div>
     <div class="auth-footer">
       your self-hosted SYSTEM instance<br>
-      <a href="https://github.com/ygwyg/system" target="_blank">docs →</a>
+      <a href="https://github.com/ygwyg/system" target="_blank">docs</a>
     </div>
   </div>
 
-  <div class="main" id="main">
-    <div class="chat hidden" id="chat">
-      <div class="messages" id="msgs">
-        <div class="welcome" id="welcome">
-          <h1>SYSTEM</h1>
-          <p>remote control</p>
-          <div class="welcome-cmds">
-            <button class="welcome-cmd" data-cmd="what's the volume?">volume</button>
-            <button class="welcome-cmd" data-cmd="play music">play</button>
-            <button class="welcome-cmd" data-cmd="open Safari">safari</button>
-            <button class="welcome-cmd" data-cmd="notify me">notify</button>
+  <div class="main-wrapper" id="main-wrapper">
+    <!-- Sidebar for conversations -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">conversations</span>
+        <button class="sidebar-close" id="sidebar-close">&times;</button>
+      </div>
+      <button class="new-chat-btn" id="new-chat-btn">+ new chat</button>
+      <div class="conversations-list" id="conversations-list">
+        <div class="conversations-empty">no conversations yet</div>
+      </div>
+    </div>
+
+    <!-- Main chat area -->
+    <div class="main" id="main">
+      <div class="chat" id="chat">
+        <div class="messages" id="msgs">
+          <div class="welcome" id="welcome">
+            <h1>SYSTEM</h1>
+            <p>remote control</p>
+            <div class="welcome-cmds">
+              <button class="welcome-cmd" data-cmd="what's the volume?">volume</button>
+              <button class="welcome-cmd" data-cmd="play music">play</button>
+              <button class="welcome-cmd" data-cmd="open Safari">safari</button>
+              <button class="welcome-cmd" data-cmd="notify me">notify</button>
+            </div>
+          </div>
+        </div>
+        <div class="input-area">
+          <div class="input-row">
+            <span class="input-prompt">></span>
+            <textarea id="input" placeholder="type a command..." rows="1"></textarea>
           </div>
         </div>
       </div>
-      <div class="input-area">
-        <div class="input-row">
-          <span class="input-prompt">›</span>
-          <textarea id="input" placeholder="type a command..." rows="1"></textarea>
+      <div class="schedules-panel" id="schedules">
+        <div class="schedules-header">
+          <span class="schedules-title">scheduled tasks</span>
+          <div class="schedules-actions">
+            <button class="header-btn" id="refresh-schedules">refresh</button>
+            <button class="header-btn" id="close-schedules">&times;</button>
+          </div>
         </div>
+        <div class="schedules-list" id="schedules-list"><div class="schedules-empty">no scheduled tasks</div></div>
       </div>
-    </div>
-    <div class="schedules-panel" id="schedules">
-      <div class="schedules-header">
-        <span class="schedules-title">scheduled tasks</span>
-        <div class="schedules-actions">
-          <button class="header-btn" id="refresh-schedules">↻</button>
-          <button class="header-btn" id="close-schedules">×</button>
-        </div>
-      </div>
-      <div class="schedules-list" id="schedules-list"><div class="schedules-empty">no scheduled tasks</div></div>
     </div>
   </div>
 
   <script>
     const API = '/agents/system-agent';
     let token = sessionStorage.getItem('system_token') || '';
+    let activeConversationId = null;
+    let conversations = [];
     
     const $ = id => document.getElementById(id);
     const auth = $('auth'), chat = $('chat'), msgs = $('msgs'), input = $('input');
     const welcome = $('welcome'), status = $('status'), authErr = $('auth-err');
     const authBtn = $('auth-btn'), tokenInput = $('token');
     const schedulesPanel = $('schedules'), schedulesList = $('schedules-list');
+    const sidebar = $('sidebar'), sidebarOverlay = $('sidebar-overlay');
+    const conversationsList = $('conversations-list');
 
     // Check existing token
     if (token) verify();
@@ -374,8 +542,7 @@ export const chatHTML = `<!DOCTYPE html>
       authErr.textContent = 'connecting...';
       
       try {
-        // Verify by calling an authenticated endpoint
-        const res = await fetch(API + '/schedules', { headers: { Authorization: 'Bearer ' + t } });
+        const res = await fetch(API + '/conversations', { headers: { Authorization: 'Bearer ' + t } });
         if (res.ok) {
           token = t;
           sessionStorage.setItem('system_token', token);
@@ -393,23 +560,32 @@ export const chatHTML = `<!DOCTYPE html>
 
     async function verify() {
       try {
-        const res = await fetch(API + '/schedules', { headers: { Authorization: 'Bearer ' + token } });
+        const res = await fetch(API + '/conversations', { headers: { Authorization: 'Bearer ' + token } });
         if (res.ok) showChat();
         else logout(res.status === 401 ? 'token expired' : 'verification failed');
       } catch { logout('connection failed'); }
     }
 
-    function showChat() {
+    async function showChat() {
       auth.classList.add('hidden');
       chat.classList.remove('hidden');
       $('header-actions').classList.remove('auth-hidden');
       setOnline(true);
       input.focus();
       
-      // Connect WebSocket for real-time updates
+      // Load conversations
+      await loadConversations();
+      
+      // Auto-create new conversation if none exist
+      if (conversations.length === 0) {
+        await createNewConversation();
+      } else if (!activeConversationId) {
+        // Select the most recent conversation
+        await switchToConversation(conversations[0].id);
+      }
+      
       setTimeout(connectWebSocket, 500);
       
-      // Request browser notification permission
       if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission();
       }
@@ -420,30 +596,216 @@ export const chatHTML = `<!DOCTYPE html>
       status.querySelector('span:last-child').textContent = on ? 'connected' : 'offline';
     }
     
-    // Logout and return to login screen
     function logout(message) {
-      // Close WebSocket
       if (ws) { ws.close(); ws = null; }
       if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
       
-      // Clear token
       sessionStorage.removeItem('system_token');
       token = '';
+      activeConversationId = null;
+      conversations = [];
       
-      // Show login screen
       chat.classList.add('hidden');
       auth.classList.remove('hidden');
       $('header-actions').classList.add('auth-hidden');
       tokenInput.value = '';
       authErr.textContent = message || '';
       
-      // Reset chat
-      msgs.innerHTML = '<div class="welcome" id="welcome"><h1>SYSTEM</h1><p>remote control</p></div>';
+      resetChatUI();
+    }
+    
+    function resetChatUI() {
+      msgs.innerHTML = '<div class="welcome" id="welcome"><h1>SYSTEM</h1><p>remote control</p><div class="welcome-cmds"><button class="welcome-cmd" data-cmd="what\\'s the volume?">volume</button><button class="welcome-cmd" data-cmd="play music">play</button><button class="welcome-cmd" data-cmd="open Safari">safari</button><button class="welcome-cmd" data-cmd="notify me">notify</button></div></div>';
+      bindWelcomeCommands();
+    }
+    
+    function bindWelcomeCommands() {
+      document.querySelectorAll('.welcome-cmd').forEach(btn => {
+        btn.addEventListener('click', () => { input.value = btn.dataset.cmd; send(); });
+      });
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // =====================================================
+    // Conversation Management
+    // =====================================================
+    
+    async function loadConversations() {
+      try {
+        const res = await fetch(API + '/conversations', { headers: { Authorization: 'Bearer ' + token } });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        conversations = data.conversations || [];
+        activeConversationId = data.activeId;
+        renderConversationsList();
+      } catch {
+        conversations = [];
+        renderConversationsList();
+      }
+    }
+    
+    function renderConversationsList() {
+      if (conversations.length === 0) {
+        conversationsList.innerHTML = '<div class="conversations-empty">no conversations yet</div>';
+        return;
+      }
+      
+      conversationsList.innerHTML = conversations.map(c => {
+        const isActive = c.id === activeConversationId;
+        const timeAgo = formatTimeAgo(c.updatedAt);
+        return '<div class="conv-item' + (isActive ? ' active' : '') + '" data-id="' + esc(c.id) + '">' +
+          '<div class="conv-title">' + esc(c.title) + '</div>' +
+          '<div class="conv-preview">' + esc(c.preview) + '</div>' +
+          '<div class="conv-meta">' +
+            '<span class="conv-time">' + timeAgo + '</span>' +
+            '<button class="conv-delete" data-id="' + esc(c.id) + '">&times;</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+      
+      // Bind click handlers
+      conversationsList.querySelectorAll('.conv-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          if (e.target.classList.contains('conv-delete')) return;
+          switchToConversation(item.dataset.id);
+        });
+      });
+      
+      conversationsList.querySelectorAll('.conv-delete').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteConversation(btn.dataset.id);
+        });
+      });
+    }
+    
+    async function createNewConversation() {
+      try {
+        const res = await fetch(API + '/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({})
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        activeConversationId = data.id;
+        await loadConversations();
+        resetChatUI();
+        closeSidebar();
+        input.focus();
+      } catch {
+        console.error('Failed to create conversation');
+      }
+    }
+    
+    async function switchToConversation(convId) {
+      if (convId === activeConversationId) {
+        closeSidebar();
+        return;
+      }
+      
+      try {
+        const res = await fetch(API + '/conversations/' + convId + '/activate', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        activeConversationId = data.id;
+        
+        // Update conversation list UI
+        conversationsList.querySelectorAll('.conv-item').forEach(item => {
+          item.classList.toggle('active', item.dataset.id === convId);
+        });
+        
+        // Render the conversation history
+        renderConversationHistory(data.history || []);
+        closeSidebar();
+      } catch {
+        console.error('Failed to switch conversation');
+      }
+    }
+    
+    async function deleteConversation(convId) {
+      if (!confirm('Delete this conversation?')) return;
+      
+      try {
+        const res = await fetch(API + '/conversations/' + convId, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        
+        // If we deleted the active conversation, switch to another
+        if (convId === activeConversationId) {
+          activeConversationId = data.activeId;
+          if (activeConversationId) {
+            await switchToConversation(activeConversationId);
+          } else {
+            await createNewConversation();
+          }
+        }
+        
+        await loadConversations();
+      } catch {
+        alert('Failed to delete conversation');
+      }
+    }
+    
+    function renderConversationHistory(history) {
+      if (history.length === 0) {
+        resetChatUI();
+        return;
+      }
+      
+      msgs.innerHTML = '';
+      const welcomeEl = $('welcome');
+      if (welcomeEl) welcomeEl.style.display = 'none';
+      
+      for (const msg of history) {
+        if (typeof msg.content === 'string') {
+          addMsg(msg.role === 'user' ? 'user' : 'assistant', msg.content);
+        }
+      }
+      
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+    
+    function formatTimeAgo(timestamp) {
+      const diff = Date.now() - timestamp;
+      const mins = Math.floor(diff / 60000);
+      const hours = Math.floor(diff / 3600000);
+      const days = Math.floor(diff / 86400000);
+      
+      if (mins < 1) return 'now';
+      if (mins < 60) return mins + 'm ago';
+      if (hours < 24) return hours + 'h ago';
+      if (days < 7) return days + 'd ago';
+      return new Date(timestamp).toLocaleDateString();
+    }
+
+    // =====================================================
+    // Sidebar Toggle
+    // =====================================================
+    
+    $('menu-btn').addEventListener('click', toggleSidebar);
+    $('sidebar-close').addEventListener('click', closeSidebar);
+    sidebarOverlay.addEventListener('click', closeSidebar);
+    $('new-chat-btn').addEventListener('click', createNewConversation);
+    
+    function toggleSidebar() {
+      sidebar.classList.toggle('visible');
+      sidebarOverlay.classList.toggle('visible');
+    }
+    
+    function closeSidebar() {
+      sidebar.classList.remove('visible');
+      sidebarOverlay.classList.remove('visible');
+    }
+
+    // =====================================================
     // WebSocket for REAL-TIME updates
-    // ═══════════════════════════════════════════════════════════════
+    // =====================================================
     let ws = null;
     let wsReconnectTimer = null;
     
@@ -478,15 +840,12 @@ export const chatHTML = `<!DOCTYPE html>
     
     function handleWSMessage(data) {
       if (data.type === 'notification') {
-        // Show real-time notification
         const payload = data.payload;
         addSystemNotification(payload.title || 'Notification', payload.message);
       } else if (data.type === 'scheduled_result') {
-        // Scheduled task completed - show result in chat
         const payload = data.payload;
         addScheduledResult(payload);
       } else if (data.type === 'chat') {
-        // Chat response via WebSocket
         addResponse(data.payload);
       } else if (data.type === 'bridge_status') {
         setOnline(data.payload.online);
@@ -496,20 +855,19 @@ export const chatHTML = `<!DOCTYPE html>
     function addSystemNotification(title, message) {
       const div = document.createElement('div');
       div.className = 'msg system-notification';
-      div.innerHTML = '<div class="notification-content"><div class="notification-title">🔔 ' + esc(title) + '</div><div class="notification-message">' + esc(message) + '</div><div class="notification-time">' + new Date().toLocaleTimeString() + '</div></div>';
+      div.innerHTML = '<div class="notification-content"><div class="notification-title">' + esc(title) + '</div><div class="notification-message">' + esc(message) + '</div><div class="notification-time">' + new Date().toLocaleTimeString() + '</div></div>';
       msgs.appendChild(div);
       msgs.scrollTop = msgs.scrollHeight;
       
-      // Also show browser notification if permitted
       if (Notification.permission === 'granted') {
-        new Notification(title, { body: message, icon: '/favicon.ico' });
+        new Notification(title, { body: message });
       }
     }
     
     function addScheduledResult(payload) {
       const div = document.createElement('div');
       div.className = 'msg assistant scheduled';
-      let html = '<div class="msg-line"><span class="msg-who">⏰</span><span class="msg-text">' + esc(payload.description) + '</span></div>';
+      let html = '<div class="msg-line"><span class="msg-who">cron</span><span class="msg-text">' + esc(payload.description) + '</span></div>';
       html += '<div class="tool-call"><div class="tool-name">' + esc(payload.tool) + '</div><div class="tool-result ' + (payload.success ? '' : 'error') + '">' + esc(payload.result) + '</div>';
       if (payload.image && payload.image.data) {
         html += '<div class="tool-image"><img src="data:' + (payload.image.mimeType || 'image/png') + ';base64,' + payload.image.data + '" alt="Screenshot" /></div>';
@@ -519,31 +877,25 @@ export const chatHTML = `<!DOCTYPE html>
       msgs.appendChild(div);
       msgs.scrollTop = msgs.scrollHeight;
     }
-    
-    // Connect WebSocket when authenticated
-    if (token) {
-      setTimeout(connectWebSocket, 500);
-      // Request notification permission
-      if (Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-    }
 
     $('disconnect-btn').addEventListener('click', () => logout());
 
+    // =====================================================
+    // Chat Send/Receive
+    // =====================================================
+    
     async function send() {
       const text = input.value.trim();
       if (!text) return;
       
-      welcome.style.display = 'none';
+      const welcomeEl = $('welcome');
+      if (welcomeEl) welcomeEl.style.display = 'none';
       addMsg('user', text);
       
-      // Immediately collapse input and blur to dismiss keyboard on mobile
       input.value = '';
       input.style.height = '20px';
       input.blur();
       
-      // Re-focus after a tick (keeps keyboard up on desktop, dismisses on mobile)
       setTimeout(() => {
         if (window.innerWidth > 768) input.focus();
         msgs.scrollTop = msgs.scrollHeight;
@@ -564,6 +916,9 @@ export const chatHTML = `<!DOCTYPE html>
           const data = await res.json();
           addResponse(data);
           setOnline(true);
+          
+          // Refresh conversations list to update preview/title
+          loadConversations();
         } else if (res.status === 401) {
           logout('session expired');
         } else {
@@ -580,7 +935,7 @@ export const chatHTML = `<!DOCTYPE html>
     function addMsg(type, text, isTyping = false) {
       const div = document.createElement('div');
       div.className = 'msg ' + type + (isTyping ? ' typing' : '');
-      const who = type === 'user' ? 'you' : type === 'system' ? 'sys' : '›';
+      const who = type === 'user' ? 'you' : type === 'system' ? 'sys' : '>';
       div.innerHTML = '<div class="msg-line"><span class="msg-who">' + who + '</span><span class="msg-text">' + (type === 'assistant' ? md(text) : esc(text)) + '</span></div>';
       msgs.appendChild(div);
       msgs.scrollTop = msgs.scrollHeight;
@@ -592,20 +947,17 @@ export const chatHTML = `<!DOCTYPE html>
       div.className = 'msg assistant';
       
       let msg = (data.message || '').replace(/^(Done!?|Sure!?)\\s*/i, '').trim();
-      let html = '<div class="msg-line"><span class="msg-who">›</span><span class="msg-text">' + md(msg) + '</span></div>';
+      let html = '<div class="msg-line"><span class="msg-who">></span><span class="msg-text">' + md(msg) + '</span></div>';
       
-      // Handle multiple actions (new format)
       if (data.actions && data.actions.length > 0) {
         for (const action of data.actions) {
           html += '<div class="tool-call"><div class="tool-name">' + esc(action.tool) + '</div><div class="tool-result ' + (action.success ? '' : 'error') + '">' + esc(action.result) + '</div>';
-          // Display image if present
           if (action.image && action.image.data) {
             html += '<div class="tool-image"><img src="data:' + (action.image.mimeType || 'image/png') + ';base64,' + action.image.data + '" alt="Screenshot" /></div>';
           }
           html += '</div>';
         }
       } else if (data.action) {
-        // Backwards compat for single action
         html += '<div class="tool-call"><div class="tool-name">' + esc(data.action.tool) + '</div><div class="tool-result ' + (data.action.success ? '' : 'error') + '">' + esc(data.action.result) + '</div>';
         if (data.action.image && data.action.image.data) {
           html += '<div class="tool-image"><img src="data:' + (data.action.image.mimeType || 'image/png') + ';base64,' + data.action.image.data + '" alt="Screenshot" /></div>';
@@ -613,7 +965,7 @@ export const chatHTML = `<!DOCTYPE html>
         html += '</div>';
       }
       if (data.scheduled) {
-        html += '<div class="scheduled-task"><div class="scheduled-when">⏱ ' + esc(data.scheduled.when) + '</div><div>' + esc(data.scheduled.description) + '</div></div>';
+        html += '<div class="scheduled-task"><div class="scheduled-when">scheduled: ' + esc(data.scheduled.when) + '</div><div>' + esc(data.scheduled.description) + '</div></div>';
       }
       
       div.innerHTML = html;
@@ -637,11 +989,10 @@ export const chatHTML = `<!DOCTYPE html>
 
     input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
     input.addEventListener('input', () => { 
-      input.style.height = '20px'; // Reset first
+      input.style.height = '20px';
       input.style.height = Math.min(input.scrollHeight, 120) + 'px';
     });
     
-    // Scroll to bottom when input gets focus (mobile keyboard appears)
     input.addEventListener('focus', () => {
       setTimeout(() => msgs.scrollTop = msgs.scrollHeight, 300);
     });
@@ -669,16 +1020,12 @@ export const chatHTML = `<!DOCTYPE html>
       overlay.classList.remove('active');
     });
 
-    document.querySelectorAll('.welcome-cmd').forEach(btn => {
-      btn.addEventListener('click', () => { input.value = btn.dataset.cmd; send(); });
-    });
+    bindWelcomeCommands();
 
-    $('new-btn').addEventListener('click', () => {
-      if (!confirm('Clear history?')) return;
-      msgs.innerHTML = '<div class="welcome" id="welcome"><h1>SYSTEM</h1><p>remote control</p><div class="welcome-cmds"><button class="welcome-cmd" data-cmd="what\\'s the volume?">volume</button><button class="welcome-cmd" data-cmd="play music">play</button></div></div>';
-      document.querySelectorAll('.welcome-cmd').forEach(btn => btn.addEventListener('click', () => { input.value = btn.dataset.cmd; send(); }));
-    });
-
+    // =====================================================
+    // Schedules Panel
+    // =====================================================
+    
     $('schedule-btn').addEventListener('click', () => {
       schedulesPanel.classList.toggle('visible');
       $('schedule-btn').classList.toggle('active');
@@ -699,7 +1046,7 @@ export const chatHTML = `<!DOCTYPE html>
             '<div class="schedule-item" data-id="' + esc(s.id) + '">' +
             '<div class="schedule-info"><div class="schedule-time">' + formatTime(s.time) + '</div>' +
             '<div class="schedule-desc">' + esc(s.payload?.description || s.payload?.tool || 'Task') + '</div></div>' +
-            '<button class="schedule-delete" onclick="deleteSchedule(\\''+esc(s.id)+'\\')">×</button>' +
+            '<button class="schedule-delete" onclick="deleteSchedule(\\''+esc(s.id)+'\\')">x</button>' +
             '</div>'
           ).join('');
         } else {
@@ -708,7 +1055,6 @@ export const chatHTML = `<!DOCTYPE html>
       } catch { schedulesList.innerHTML = '<div class="schedules-empty">failed to load</div>'; }
     }
     
-    // Expose deleteSchedule globally for onclick handlers
     window.deleteSchedule = async function(id) {
       if (!confirm('Delete this scheduled task?')) return;
       try {

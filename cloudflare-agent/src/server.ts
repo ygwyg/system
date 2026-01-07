@@ -57,11 +57,27 @@ interface ScheduleRecord {
   type: "one-time" | "recurring";
 }
 
-interface SystemState {
+interface Conversation {
+  id: string;
+  title: string;
   history: Message[];
+  pendingAction?: PendingAction;
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface SystemState {
+  // Multi-conversation support
+  conversations: Record<string, Conversation>;
+  activeConversationId: string | null;
+  
+  // Legacy single-conversation (migrated on first load)
+  history: Message[];
+  pendingAction?: PendingAction;
+  
+  // Shared across all conversations
   preferences: Record<string, string>;
   lastActive: number;
-  pendingAction?: PendingAction;
   rateLimit?: RateLimit;
   scheduleRegistry: ScheduleRecord[];
   lastScreenshot?: {
@@ -107,7 +123,9 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 export class SystemAgent extends Agent<Env, SystemState> {
   initialState: SystemState = {
-    history: [],
+    conversations: {},
+    activeConversationId: null,
+    history: [], // Legacy, for migration
     preferences: {},
     lastActive: Date.now(),
     scheduleRegistry: [],
@@ -116,6 +134,184 @@ export class SystemAgent extends Agent<Env, SystemState> {
   private readonly RATE_LIMIT = 60;
   private readonly RATE_WINDOW = 60 * 1000;
   private connections: Map<string, Connection> = new Map();
+
+  // ═══════════════════════════════════════════════════════════════
+  // Conversation Management
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Migrate legacy single-conversation state to multi-conversation format
+   */
+  private migrateIfNeeded(): void {
+    // Ensure conversations object exists
+    if (!this.state.conversations) {
+      this.setState({ ...this.state, conversations: {} });
+    }
+    
+    // Already migrated
+    if (Object.keys(this.state.conversations || {}).length > 0 || this.state.activeConversationId) {
+      return;
+    }
+    
+    // Has legacy history to migrate
+    if (this.state.history && this.state.history.length > 0) {
+      const legacyId = this.generateConversationId();
+      const conversation: Conversation = {
+        id: legacyId,
+        title: this.generateTitle(this.state.history),
+        history: this.state.history,
+        pendingAction: this.state.pendingAction,
+        createdAt: (this.state.lastActive || Date.now()) - 60000, // Approximate
+        updatedAt: this.state.lastActive || Date.now(),
+      };
+      
+      this.setState({
+        ...this.state,
+        conversations: { [legacyId]: conversation },
+        activeConversationId: legacyId,
+        history: [], // Clear legacy
+        pendingAction: undefined,
+      });
+    }
+  }
+
+  private generateConversationId(): string {
+    return `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private generateTitle(history: Message[]): string {
+    // Use first user message as title, truncated
+    const firstUser = history.find(m => m.role === "user");
+    if (firstUser && typeof firstUser.content === "string") {
+      const title = firstUser.content.slice(0, 40);
+      return title.length < firstUser.content.length ? title + "..." : title;
+    }
+    return "New conversation";
+  }
+
+  /**
+   * Get or create active conversation
+   */
+  getActiveConversation(): Conversation {
+    this.migrateIfNeeded();
+    
+    const conversations = this.state.conversations || {};
+    if (this.state.activeConversationId && conversations[this.state.activeConversationId]) {
+      return conversations[this.state.activeConversationId];
+    }
+    
+    // Create new conversation
+    return this.createConversation();
+  }
+
+  /**
+   * Create a new conversation and make it active
+   */
+  createConversation(title?: string): Conversation {
+    const id = this.generateConversationId();
+    const conversation: Conversation = {
+      id,
+      title: title || "New conversation",
+      history: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    
+    const existingConversations = this.state.conversations || {};
+    this.setState({
+      ...this.state,
+      conversations: { ...existingConversations, [id]: conversation },
+      activeConversationId: id,
+    });
+    
+    return conversation;
+  }
+
+  /**
+   * Switch to an existing conversation
+   */
+  switchConversation(conversationId: string): Conversation | null {
+    const conversations = this.state.conversations || {};
+    const conversation = conversations[conversationId];
+    if (!conversation) return null;
+    
+    this.setState({ ...this.state, activeConversationId: conversationId });
+    return conversation;
+  }
+
+  /**
+   * Delete a conversation
+   */
+  deleteConversation(conversationId: string): boolean {
+    const conversations = this.state.conversations || {};
+    if (!conversations[conversationId]) return false;
+    
+    const { [conversationId]: _, ...remaining } = conversations;
+    const newActiveId = this.state.activeConversationId === conversationId
+      ? Object.keys(remaining)[0] || null
+      : this.state.activeConversationId;
+    
+    this.setState({
+      ...this.state,
+      conversations: remaining,
+      activeConversationId: newActiveId,
+    });
+    
+    return true;
+  }
+
+  /**
+   * Update conversation history
+   */
+  updateConversationHistory(conversationId: string, history: Message[], pendingAction?: PendingAction): void {
+    const conversations = this.state.conversations || {};
+    const conversation = conversations[conversationId];
+    if (!conversation) return;
+    
+    const updatedTitle = conversation.title === "New conversation" && history.length > 0
+      ? this.generateTitle(history)
+      : conversation.title;
+    
+    this.setState({
+      ...this.state,
+      conversations: {
+        ...conversations,
+        [conversationId]: {
+          ...conversation,
+          title: updatedTitle,
+          history: history.slice(-50), // Keep last 50 messages
+          pendingAction,
+          updatedAt: Date.now(),
+        },
+      },
+      lastActive: Date.now(),
+    });
+  }
+
+  /**
+   * List all conversations sorted by most recent
+   */
+  listConversations(): Array<{ id: string; title: string; preview: string; updatedAt: number; messageCount: number }> {
+    const conversations = this.state.conversations || {};
+    return Object.values(conversations)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(c => ({
+        id: c.id,
+        title: c.title,
+        preview: this.getConversationPreview(c),
+        updatedAt: c.updatedAt,
+        messageCount: c.history.length,
+      }));
+  }
+
+  private getConversationPreview(conversation: Conversation): string {
+    const lastAssistant = [...conversation.history].reverse().find(m => m.role === "assistant");
+    if (lastAssistant && typeof lastAssistant.content === "string") {
+      const preview = lastAssistant.content.slice(0, 60);
+      return preview.length < lastAssistant.content.length ? preview + "..." : preview;
+    }
+    return "No messages yet";
+  }
 
   // WebSocket handlers
   onConnect(connection: Connection, _ctx: ConnectionContext) {
@@ -234,7 +430,77 @@ export class SystemAgent extends Agent<Env, SystemState> {
       );
     }
     
-    // Chat
+    // ═══════════════════════════════════════════════════════════════
+    // Conversation Management Endpoints
+    // ═══════════════════════════════════════════════════════════════
+    
+    // List all conversations
+    if (path.endsWith("/conversations") && request.method === "GET") {
+      this.migrateIfNeeded();
+      return Response.json({
+        conversations: this.listConversations(),
+        activeId: this.state.activeConversationId,
+      });
+    }
+    
+    // Create new conversation
+    if (path.endsWith("/conversations") && request.method === "POST") {
+      const body = await request.json().catch(() => ({})) as { title?: string };
+      const conversation = this.createConversation(body.title);
+      return Response.json({
+        id: conversation.id,
+        title: conversation.title,
+        createdAt: conversation.createdAt,
+      });
+    }
+    
+    // Get specific conversation
+    if (path.match(/\/conversations\/[^/]+$/) && request.method === "GET") {
+      const conversationId = path.split('/').pop()!;
+      const conversation = this.state.conversations[conversationId];
+      if (!conversation) {
+        return Response.json({ error: "Conversation not found" }, { status: 404 });
+      }
+      return Response.json({
+        id: conversation.id,
+        title: conversation.title,
+        history: conversation.history,
+        pendingAction: conversation.pendingAction,
+        createdAt: conversation.createdAt,
+        updatedAt: conversation.updatedAt,
+      });
+    }
+    
+    // Switch to conversation
+    if (path.match(/\/conversations\/[^/]+\/activate$/) && request.method === "POST") {
+      const conversationId = path.split('/').slice(-2)[0];
+      const conversation = this.switchConversation(conversationId);
+      if (!conversation) {
+        return Response.json({ error: "Conversation not found" }, { status: 404 });
+      }
+      return Response.json({
+        id: conversation.id,
+        title: conversation.title,
+        history: conversation.history,
+        pendingAction: conversation.pendingAction,
+      });
+    }
+    
+    // Delete conversation
+    if (path.match(/\/conversations\/[^/]+$/) && request.method === "DELETE") {
+      const conversationId = path.split('/').pop()!;
+      const deleted = this.deleteConversation(conversationId);
+      if (!deleted) {
+        return Response.json({ error: "Conversation not found" }, { status: 404 });
+      }
+      return Response.json({ success: true, activeId: this.state.activeConversationId });
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // Chat & Other Endpoints
+    // ═══════════════════════════════════════════════════════════════
+    
+    // Chat (uses active conversation)
     if (path.endsWith("/chat") && request.method === "POST") {
       return this.handleChat(request);
     }
@@ -243,15 +509,21 @@ export class SystemAgent extends Agent<Env, SystemState> {
     if (path.endsWith("/reset") && request.method === "POST") {
       const prefs = this.state.preferences;
       this.setState({ ...this.initialState, preferences: prefs, lastActive: Date.now() });
-      return Response.json({ success: true, message: "History cleared, preferences kept" });
+      return Response.json({ success: true, message: "All conversations cleared, preferences kept" });
     }
     
     // Get state (debug)
     if (path.endsWith("/state") && request.method === "GET") {
+      this.migrateIfNeeded();
+      const activeConv = this.state.activeConversationId 
+        ? this.state.conversations[this.state.activeConversationId] 
+        : null;
       return Response.json({
-        historyLength: this.state.history.length,
+        conversationCount: Object.keys(this.state.conversations).length,
+        activeConversationId: this.state.activeConversationId,
+        activeHistoryLength: activeConv?.history.length || 0,
         preferences: this.state.preferences,
-        pendingAction: this.state.pendingAction,
+        pendingAction: activeConv?.pendingAction,
         lastActive: this.state.lastActive,
       });
     }
@@ -289,14 +561,20 @@ export class SystemAgent extends Agent<Env, SystemState> {
       return Response.json({ error: "Invalid schedule ID" }, { status: 400 });
     }
     
-    // Get history
+    // Get history (legacy, returns active conversation history)
     if (path.endsWith("/history") && request.method === "GET") {
-      return Response.json({ history: this.state.history, lastActive: this.state.lastActive });
+      const activeConv = this.getActiveConversation();
+      return Response.json({ 
+        history: activeConv.history, 
+        lastActive: this.state.lastActive,
+        conversationId: activeConv.id,
+      });
     }
     
-    // Clear history
+    // Clear history (clears active conversation)
     if (path.endsWith("/clear") && request.method === "POST") {
-      this.setState({ ...this.state, history: [] });
+      const activeConv = this.getActiveConversation();
+      this.updateConversationHistory(activeConv.id, []);
       return Response.json({ success: true });
     }
     
@@ -337,51 +615,51 @@ export class SystemAgent extends Agent<Env, SystemState> {
     action?: { tool: string; args: Record<string, unknown>; result: string; success: boolean };
     actions?: Array<{ tool: string; args: Record<string, unknown>; result: string; success: boolean; image?: { data: string; mimeType: string } }>;
     scheduled?: { id: string; when: string; description: string };
+    conversationId?: string;
   }> {
+    // Get active conversation (creates new one if needed)
+    const conversation = this.getActiveConversation();
+    const conversationId = conversation.id;
+    
     // Handle pending actions (human-in-the-loop)
-    if (this.state.pendingAction) {
-      const pending = this.state.pendingAction;
+    if (conversation.pendingAction) {
+      const pending = conversation.pendingAction;
       
       if (this.isConfirmation(message)) {
         const result = await this.callBridge(pending.tool, pending.args);
-        this.setState({
-          ...this.state,
-          pendingAction: undefined,
-          history: [
-            ...this.state.history,
-            { role: "user" as const, content: message },
-            { role: "assistant" as const, content: result.success ? "Sent!" : "Failed." },
-          ].slice(-50),
-          lastActive: Date.now(),
-        });
+        const newHistory = [
+          ...conversation.history,
+          { role: "user" as const, content: message },
+          { role: "assistant" as const, content: result.success ? "Sent!" : "Failed." },
+        ];
+        this.updateConversationHistory(conversationId, newHistory, undefined);
         
         return {
           message: result.success ? "Sent!" : `Failed: ${result.error}`,
           action: { tool: pending.tool, args: pending.args, result: result.success ? result.result! : result.error!, success: result.success },
+          conversationId,
         };
       }
       
       if (this.isCancellation(message)) {
-        this.setState({
-          ...this.state,
-          pendingAction: undefined,
-          history: [...this.state.history, { role: "user" as const, content: message }, { role: "assistant" as const, content: "Cancelled." }].slice(-50),
-          lastActive: Date.now(),
-        });
-        return { message: "Cancelled." };
+        const newHistory = [
+          ...conversation.history,
+          { role: "user" as const, content: message },
+          { role: "assistant" as const, content: "Cancelled." },
+        ];
+        this.updateConversationHistory(conversationId, newHistory, undefined);
+        return { message: "Cancelled.", conversationId };
       }
       
       if (pending.args.message === '' && pending.tool === 'send_imessage') {
-        this.setState({
-          ...this.state,
-          pendingAction: { ...pending, args: { ...pending.args, message } },
-          history: [...this.state.history, { role: "user" as const, content: message }].slice(-50),
-          lastActive: Date.now(),
-        });
-        return { message: `Send "${message}" to ${pending.args.to}? *(yes/no)*` };
+        const newHistory = [...conversation.history, { role: "user" as const, content: message }];
+        const newPending = { ...pending, args: { ...pending.args, message } };
+        this.updateConversationHistory(conversationId, newHistory, newPending);
+        return { message: `Send "${message}" to ${pending.args.to}? *(yes/no)*`, conversationId };
       }
       
-      this.setState({ ...this.state, pendingAction: undefined });
+      // Clear pending action if neither confirm nor cancel
+      this.updateConversationHistory(conversationId, conversation.history, undefined);
     }
     
     // Step 1: Quick intent classification with Haiku
@@ -389,7 +667,7 @@ export class SystemAgent extends Agent<Env, SystemState> {
     
     // Step 2: Process with Claude using intent-aware context
     const tools = await this.fetchTools();
-    const messages: Message[] = [...this.state.history.slice(-40), { role: "user" as const, content: message }];
+    const messages: Message[] = [...conversation.history.slice(-40), { role: "user" as const, content: message }];
     const systemPrompt = this.buildSystemPrompt(tools, intent);
     const response = await this.callClaude(systemPrompt, messages);
     const { text, actions, schedule } = this.parseResponse(response);
@@ -432,11 +710,15 @@ JUST describe what's visible in the screenshot. Keep it brief.`,
           result.image
         );
         
-        // Store the screenshot so user can reference it later ("send that to...")
+        // Store the screenshot and update conversation history
+        const newHistory = [
+          ...conversation.history,
+          { role: "user" as const, content: message },
+          { role: "assistant" as const, content: analysis },
+        ];
+        this.updateConversationHistory(conversationId, newHistory);
         this.setState({
           ...this.state,
-          history: [...this.state.history, { role: "user" as const, content: message }, { role: "assistant" as const, content: analysis }].slice(-50),
-          lastActive: Date.now(),
           lastScreenshot: {
             data: result.image.data,
             mimeType: result.image.mimeType,
@@ -445,7 +727,7 @@ JUST describe what's visible in the screenshot. Keep it brief.`,
           },
         });
         
-        return { message: analysis, actions: actionResults };
+        return { message: analysis, actions: actionResults, conversationId };
       }
       
       // Contact search -> message flow (human-in-the-loop)
@@ -474,31 +756,33 @@ JUST describe what's visible in the screenshot. Keep it brief.`,
           
           if (/make\s*up|create|write|generate/i.test(message)) {
             const generated = await this.callClaude("Write a short, friendly message. Just the text, nothing else.", [{ role: "user", content: `Write: "${message}"` }]);
-            this.setState({ ...this.state, pendingAction: { tool: 'send_imessage', args: { to: phone, message: generated.trim() }, context: result.result, originalRequest: message } });
-            return { message: `Found: **${result.result}**\n\n> "${generated.trim()}"\n\nSend? *(yes/no)*`, actions: actionResults };
+            const newPending: PendingAction = { tool: 'send_imessage', args: { to: phone, message: generated.trim() }, context: result.result, originalRequest: message };
+            this.updateConversationHistory(conversationId, conversation.history, newPending);
+            return { message: `Found: **${result.result}**\n\n> "${generated.trim()}"\n\nSend? *(yes/no)*`, actions: actionResults, conversationId };
           }
           
-          this.setState({
-            ...this.state,
-            pendingAction: { tool: 'send_imessage', args: { to: phone, message: intendedMessage }, context: result.result, originalRequest: message },
-            history: [...this.state.history, { role: "user" as const, content: message }].slice(-50),
-          });
+          const newPending: PendingAction = { tool: 'send_imessage', args: { to: phone, message: intendedMessage }, context: result.result, originalRequest: message };
+          const newHistory = [...conversation.history, { role: "user" as const, content: message }];
+          this.updateConversationHistory(conversationId, newHistory, newPending);
           
           return {
             message: intendedMessage ? `Found: **${result.result}**\n\nSend "${intendedMessage}"? *(yes/no)*` : `Found: **${result.result}**\n\nWhat message?`,
             actions: actionResults,
+            conversationId,
           };
         }
       }
     }
     
-    this.setState({
-      ...this.state,
-      history: [...this.state.history, { role: "user" as const, content: message }, { role: "assistant" as const, content: response }].slice(-50),
-      lastActive: Date.now(),
-    });
+    // Update conversation history
+    const newHistory = [
+      ...conversation.history,
+      { role: "user" as const, content: message },
+      { role: "assistant" as const, content: response },
+    ];
+    this.updateConversationHistory(conversationId, newHistory);
     
-    return { message: text, action: actionResults[0], actions: actionResults, scheduled: scheduledTask };
+    return { message: text, action: actionResults[0], actions: actionResults, scheduled: scheduledTask, conversationId };
   }
 
   async scheduleAction(schedule: { when: string; tool: string; args: Record<string, unknown>; description: string }): Promise<{ id: string }> {
