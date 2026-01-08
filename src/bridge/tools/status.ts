@@ -2,7 +2,7 @@
  * Status Tools - System monitoring
  */
 
-import { SystemTool } from './types.js';
+import type { SystemTool } from './types.js';
 import { execCommand, runAppleScript } from './utils/command.js';
 
 export const statusTools: SystemTool[] = [
@@ -17,11 +17,18 @@ export const statusTools: SystemTool[] = [
         const chargingMatch = stdout.match(/(charging|discharging|charged|AC Power)/i);
         const level = levelMatch ? levelMatch[1] : 'Unknown';
         const status = chargingMatch ? chargingMatch[1] : '';
-        return { content: [{ type: 'text', text: `Battery: ${level}%${status ? ` (${status})` : ''}` }] };
+        return {
+          content: [{ type: 'text', text: `Battery: ${level}%${status ? ` (${status})` : ''}` }],
+        };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'wifi_status',
@@ -29,14 +36,17 @@ export const statusTools: SystemTool[] = [
     inputSchema: { type: 'object', properties: {} },
     handler: async () => {
       try {
-        const { stdout } = await execCommand('/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport', ['-I']);
+        const { stdout } = await execCommand(
+          '/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport',
+          ['-I']
+        );
         const ssidMatch = stdout.match(/\sSSID:\s*(.+)/);
         const ssid = ssidMatch ? ssidMatch[1].trim() : 'Not connected';
         return { content: [{ type: 'text', text: `WiFi: ${ssid}` }] };
       } catch {
         return { content: [{ type: 'text', text: 'WiFi: Unable to determine' }] };
       }
-    }
+    },
   },
   {
     name: 'storage_status',
@@ -48,13 +58,20 @@ export const statusTools: SystemTool[] = [
         const lines = stdout.trim().split('\n');
         if (lines.length >= 2) {
           const parts = lines[1].split(/\s+/);
-          return { content: [{ type: 'text', text: `Storage: ${parts[3]} available of ${parts[1]}` }] };
+          return {
+            content: [{ type: 'text', text: `Storage: ${parts[3]} available of ${parts[1]}` }],
+          };
         }
         return { content: [{ type: 'text', text: 'Storage: Unable to determine' }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'running_apps',
@@ -75,9 +92,14 @@ export const statusTools: SystemTool[] = [
         `);
         return { content: [{ type: 'text', text: `Running: ${result}` }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'front_app',
@@ -92,8 +114,13 @@ export const statusTools: SystemTool[] = [
         `);
         return { content: [{ type: 'text', text: `Front app: ${result}` }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
-  }
+    },
+  },
 ];

@@ -365,7 +365,9 @@ export class SystemAgent extends Agent<Env, SystemState> {
           timestamp: new Date().toISOString(),
         });
       }
-    } catch {}
+    } catch (error) {
+      console.error('WebSocket message handling error:', error);
+    }
   }
 
   onClose(connection: Connection) {
@@ -547,7 +549,7 @@ export class SystemAgent extends Agent<Env, SystemState> {
     if (path.match(/\/schedules\/[^/]+$/) && request.method === "DELETE") {
       const scheduleId = path.split('/').pop();
       if (scheduleId) {
-        try { await this.cancelSchedule(scheduleId); } catch {}
+        try { await this.cancelSchedule(scheduleId); } catch (error) { console.error('Failed to cancel schedule:', error); }
         const registry = this.state.scheduleRegistry || [];
         this.setState({
           ...this.state,
@@ -909,15 +911,16 @@ JUST describe what's visible in the screenshot. Keep it brief.`,
 █ DO NOT USE: read_imessages (that is ONLY for reading)       █
 ███████████████████████████████████████████████████████████████
 `,
-      music: `\n⚡ INTENT: Music control. Use music_* tools or raycast_search for Spotify.`,
+      music: `\n⚡ INTENT: Music control. Use music_* tools. For Spotify, prefer spotify_player_* tools if available.`,
       system: `\n⚡ INTENT: System control. Use appropriate system tools.`,
       calendar: `\n⚡ INTENT: Calendar. Use calendar_* tools.`,
       reminders: `\n⚡ INTENT: Reminders. Use reminders_* tools.`,
       notes: `\n⚡ INTENT: Notes. Use notes_* tools.`,
       files: `\n⚡ INTENT: Files. Use finder_* tools.`,
       apps: `\n⚡ INTENT: App control. Use open_app tool.`,
-      web: `\n⚡ INTENT: Web/social. Use open_url or raycast_search.`,
-      raycast: `\n⚡ INTENT: General automation. Consider using raycast_search.`,
+      twitter: `\n⚡ INTENT: Twitter/X. Use twitter_* tools (twitter_send for tweets, twitter_timeline for feed).`,
+      web: `\n⚡ INTENT: Web browsing. Use open_url for websites.`,
+      raycast: `\n⚡ INTENT: General automation. Check for specific extension tools first, use raycast_search only as fallback.`,
       conversation: `\n⚡ INTENT: Conversation. Just respond naturally, no tools needed.`,
     };
     
@@ -989,27 +992,16 @@ RAYCAST (preferred for most tasks):
 - raycast_ai: Ask Raycast AI to do something
 - raycast: Run specific extension commands
 
-===== RAYCAST-FIRST APPROACH =====
+===== TOOL SELECTION =====
 
-For most tasks, use raycast_search - it's the most reliable way to do things on Mac:
+ALWAYS prefer specific extension tools over raycast_search when available!
 
-\`\`\`action
-{"tool": "raycast_search", "args": {"query": "tweet hello world"}}
-\`\`\`
+For Twitter/X: Use twitter_* tools (twitter_send_tweet, twitter_recent_tweets, etc.)
+For Spotify: Use spotify_player_* tools (spotify_player_search, spotify_player_togglePlayPause, etc.)
+For Linear: Use linear_* tools (linear_create_issue, etc.)
+For Slack: Use slack_* tools (slack_send_message, etc.)
 
-\`\`\`action
-{"tool": "raycast_search", "args": {"query": "create note meeting notes"}}
-\`\`\`
-
-\`\`\`action
-{"tool": "raycast_search", "args": {"query": "play spotify chill vibes"}}
-\`\`\`
-
-\`\`\`action
-{"tool": "raycast_search", "args": {"query": "open twitter"}}
-\`\`\`
-
-Raycast can: open apps, search the web, control Spotify, post to social media, create notes, manage tasks, and much more based on installed extensions.
+Only use raycast_search as a FALLBACK when no specific tool exists for the task.
 
 ===== ACTION FORMAT =====
 
@@ -1089,7 +1081,9 @@ Be brief. Don't explain - just do it.`;
       try {
         const action = JSON.parse(actionMatch[1]);
         if (action?.tool) actions.push(action);
-      } catch {}
+      } catch (error) {
+        console.error('Failed to parse action block:', error);
+      }
     }
     text = text.replace(/```action\n?[\s\S]*?\n?```/g, "").trim();
     
@@ -1099,7 +1093,9 @@ Be brief. Don't explain - just do it.`;
       try {
         schedule = JSON.parse(scheduleMatch[1]);
         text = text.replace(/```schedule\n?[\s\S]*?\n?```/, "").trim();
-      } catch {}
+      } catch (error) {
+        console.error('Failed to parse schedule block:', error);
+      }
     }
     
     // Extract preference block
@@ -1109,7 +1105,9 @@ Be brief. Don't explain - just do it.`;
         const pref = JSON.parse(prefMatch[1]);
         text = text.replace(/```preference\n?[\s\S]*?\n?```/, "").trim();
         if (pref) this.setState({ ...this.state, preferences: { ...this.state.preferences, [pref.key]: pref.value } });
-      } catch {}
+      } catch (error) {
+        console.error('Failed to parse preference block:', error);
+      }
     }
     
     return { text: text || "Done!", actions, schedule };
@@ -1132,7 +1130,8 @@ Categories:
 - notes: Creating, reading, searching notes
 - files: Finding files, downloads, desktop, finder
 - apps: Opening apps, switching apps
-- web: Opening URLs, browsing, twitter, social media posts
+- twitter: Tweeting, posting to twitter/X, viewing tweets, twitter timeline
+- web: Opening URLs, browsing websites (NOT twitter - that's its own category)
 - raycast: General automation, anything else
 - conversation: Casual chat, questions, not a command
 

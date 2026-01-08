@@ -2,7 +2,7 @@
  * Finder Tools - File system operations
  */
 
-import { SystemTool } from './types.js';
+import type { SystemTool } from './types.js';
 import { execCommand, runAppleScript } from './utils/command.js';
 
 export const finderTools: SystemTool[] = [
@@ -13,9 +13,9 @@ export const finderTools: SystemTool[] = [
       type: 'object',
       properties: {
         query: { type: 'string', description: 'Search query' },
-        limit: { type: 'number', description: 'Max results (default 10)' }
+        limit: { type: 'number', description: 'Max results (default 10)' },
       },
-      required: ['query']
+      required: ['query'],
     },
     handler: async (args) => {
       const query = String(args.query);
@@ -26,9 +26,14 @@ export const finderTools: SystemTool[] = [
         if (results.length === 0) return { content: [{ type: 'text', text: 'No files found' }] };
         return { content: [{ type: 'text', text: results.join('\n') }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'finder_downloads',
@@ -36,8 +41,8 @@ export const finderTools: SystemTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        count: { type: 'number', description: 'Number of files to list (default 10)' }
-      }
+        count: { type: 'number', description: 'Number of files to list (default 10)' },
+      },
     },
     handler: async (args) => {
       const count = Math.min(20, Math.max(1, Number(args.count) || 10));
@@ -46,9 +51,14 @@ export const finderTools: SystemTool[] = [
         const files = stdout.trim().split('\n').slice(0, count);
         return { content: [{ type: 'text', text: files.join('\n') || 'Downloads empty' }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'finder_desktop',
@@ -60,9 +70,14 @@ export const finderTools: SystemTool[] = [
         const files = stdout.trim().split('\n').filter(Boolean);
         return { content: [{ type: 'text', text: files.join('\n') || 'Desktop empty' }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'finder_reveal',
@@ -70,9 +85,9 @@ export const finderTools: SystemTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'File or folder path' }
+        path: { type: 'string', description: 'File or folder path' },
       },
-      required: ['path']
+      required: ['path'],
     },
     handler: async (args) => {
       const path = String(args.path).replace(/"/g, '\\"');
@@ -81,9 +96,14 @@ export const finderTools: SystemTool[] = [
         await runAppleScript(`tell application "Finder" to activate`);
         return { content: [{ type: 'text', text: `Revealed: ${path}` }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'finder_trash',
@@ -91,9 +111,9 @@ export const finderTools: SystemTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'File path to trash' }
+        path: { type: 'string', description: 'File path to trash' },
       },
-      required: ['path']
+      required: ['path'],
     },
     handler: async (args) => {
       const path = String(args.path).replace(/"/g, '\\"');
@@ -101,8 +121,13 @@ export const finderTools: SystemTool[] = [
         await runAppleScript(`tell application "Finder" to delete POSIX file "${path}"`);
         return { content: [{ type: 'text', text: `Trashed: ${path}` }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
-  }
+    },
+  },
 ];

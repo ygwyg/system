@@ -5,8 +5,11 @@ use std::path::PathBuf;
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
-    pub auth_token: Option<String>,
     pub anthropic_key: Option<String>,
+    pub project_root: Option<String>,
+    pub tunnel_url: Option<String>,
+    // Legacy/advanced fields
+    pub auth_token: Option<String>,
     pub mode: Option<String>,
     pub deployed: Option<bool>,
     pub deployed_url: Option<String>,
@@ -15,28 +18,28 @@ pub struct Config {
     pub extensions: Vec<serde_json::Value>,
 }
 
-/// Get the path to the config file (in the main project directory)
+/// Get the app's config directory (~/.config/system or ~/Library/Application Support/system)
+fn get_config_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let home = std::env::var("HOME")?;
+    
+    // Use macOS standard location
+    let config_dir = PathBuf::from(&home)
+        .join("Library")
+        .join("Application Support")
+        .join("system");
+    
+    // Create if doesn't exist
+    if !config_dir.exists() {
+        fs::create_dir_all(&config_dir)?;
+    }
+    
+    Ok(config_dir)
+}
+
+/// Get the path to the config file
 fn config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    // Look for bridge.config.json in the project root
-    // When running from app/, we need to go up one level
-    let current_dir = std::env::current_dir()?;
-    
-    // Try current directory first
-    let config_file = current_dir.join("bridge.config.json");
-    if config_file.exists() {
-        return Ok(config_file);
-    }
-    
-    // Try parent directory (when running from app/)
-    if let Some(parent) = current_dir.parent() {
-        let config_file = parent.join("bridge.config.json");
-        if config_file.exists() {
-            return Ok(config_file);
-        }
-    }
-    
-    // Default to current directory
-    Ok(current_dir.join("bridge.config.json"))
+    let config_dir = get_config_dir()?;
+    Ok(config_dir.join("config.json"))
 }
 
 /// Load configuration from bridge.config.json

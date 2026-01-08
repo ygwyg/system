@@ -12,7 +12,14 @@
     "check": "node dist/cli/check.js",
     "dev": "node dist/bridge/http-server.js",
     "build": "tsc",
-    "postinstall": "npm run build || true"
+    "postinstall": "npm run build || true",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write src/",
+    "format:check": "prettier --check src/",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "prepare": "husky"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
@@ -23,10 +30,19 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@types/express": "^4.17.21",
     "@types/node": "^20.10.0",
+    "@vitest/coverage-v8": "^4.0.16",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.7.4",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.52.0",
+    "vitest": "^4.0.16"
   },
   "keywords": [
     "mac",
@@ -45,5 +61,11 @@
   "homepage": "https://github.com/ygwyg/system#readme",
   "bugs": {
     "url": "https://github.com/ygwyg/system/issues"
+  },
+  "lint-staged": {
+    "src/**/*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ]
   }
 }

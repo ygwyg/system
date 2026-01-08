@@ -1,0 +1,18 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Background -->
+<rect width="512" height="512" rx="80" fill="#0a0a0a"/>
+<!-- Diamond logo scaled and centered -->
+<rect x="236" y="116" width="40" height="40" fill="white"/>
+<rect x="236" y="356" width="40" height="40" fill="white"/>
+<rect x="236" y="236" width="40" height="40" fill="white"/>
+<rect x="196" y="156" width="40" height="40" fill="white"/>
+<rect x="196" y="316" width="40" height="40" fill="white"/>
+<rect x="276" y="156" width="40" height="40" fill="white"/>
+<rect x="276" y="316" width="40" height="40" fill="white"/>
+<rect x="156" y="196" width="40" height="40" fill="white"/>
+<rect x="156" y="276" width="40" height="40" fill="white"/>
+<rect x="316" y="196" width="40" height="40" fill="white"/>
+<rect x="116" y="236" width="40" height="40" fill="white"/>
+<rect x="316" y="276" width="40" height="40" fill="white"/>
+<rect x="356" y="236" width="40" height="40" fill="white"/>
+</svg>

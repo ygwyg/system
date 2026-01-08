@@ -1,68 +1,25 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import Onboarding from './components/Onboarding';
-import MenuBar from './components/MenuBar';
-
-type AppMode = 'onboarding' | 'menubar';
-
-interface AppState {
-  mode: AppMode;
-  configured: boolean;
-  bridgeRunning: boolean;
-  tunnelUrl: string | null;
-  deployedUrl: string | null;
-}
 
 function App() {
-  const [state, setState] = useState<AppState>({
-    mode: 'onboarding',
-    configured: false,
-    bridgeRunning: false,
-    tunnelUrl: null,
-    deployedUrl: null,
-  });
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Check if already configured
-    checkConfig();
+    // Small delay to let things initialize
+    setTimeout(() => setReady(true), 100);
   }, []);
 
-  async function checkConfig() {
-    try {
-      const config = await invoke<{ configured: boolean; deployedUrl?: string }>('check_config');
-      if (config.configured) {
-        setState(s => ({ 
-          ...s, 
-          mode: 'menubar', 
-          configured: true,
-          deployedUrl: config.deployedUrl || null,
-        }));
-      }
-    } catch (e) {
-      console.error('Failed to check config:', e);
-    }
+  if (!ready) {
+    return (
+      <div className="onboarding">
+        <div className="header">
+          <img src="/system_white.svg" alt="SYSTEM" className="logo-img" />
+        </div>
+      </div>
+    );
   }
 
-  function handleOnboardingComplete(deployedUrl?: string) {
-    setState(s => ({ 
-      ...s, 
-      mode: 'menubar', 
-      configured: true,
-      deployedUrl: deployedUrl || null,
-    }));
-  }
-
-  if (state.mode === 'onboarding') {
-    return <Onboarding onComplete={handleOnboardingComplete} />;
-  }
-
-  return (
-    <MenuBar 
-      bridgeRunning={state.bridgeRunning}
-      tunnelUrl={state.tunnelUrl}
-      deployedUrl={state.deployedUrl}
-    />
-  );
+  return <Onboarding onComplete={() => {}} />;
 }
 
 export default App;

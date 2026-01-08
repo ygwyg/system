@@ -2,7 +2,7 @@
  * Browser Tools - Browser URL and tabs
  */
 
-import { SystemTool } from './types.js';
+import type { SystemTool } from './types.js';
 import { runAppleScript } from './utils/command.js';
 
 export const browserTools: SystemTool[] = [
@@ -30,7 +30,7 @@ export const browserTools: SystemTool[] = [
       } catch {
         return { content: [{ type: 'text', text: 'No browser URL found' }] };
       }
-    }
+    },
   },
   {
     name: 'browser_tabs',
@@ -68,6 +68,6 @@ export const browserTools: SystemTool[] = [
       } catch {
         return { content: [{ type: 'text', text: 'Could not get browser tabs' }] };
       }
-    }
-  }
+    },
+  },
 ];

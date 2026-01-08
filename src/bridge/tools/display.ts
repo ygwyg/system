@@ -2,7 +2,7 @@
  * Display Tools - Brightness, dark mode, DND controls
  */
 
-import { SystemTool } from './types.js';
+import type { SystemTool } from './types.js';
 import { execCommand, runAppleScript } from './utils/command.js';
 
 export const displayTools: SystemTool[] = [
@@ -12,25 +12,35 @@ export const displayTools: SystemTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        level: { type: 'number', description: 'Brightness level 0-100' }
+        level: { type: 'number', description: 'Brightness level 0-100' },
       },
-      required: ['level']
+      required: ['level'],
     },
     handler: async (args) => {
       const level = Math.min(100, Math.max(0, Number(args.level) || 50));
       const normalized = level / 100;
       try {
-        await runAppleScript(`tell application "System Events" to set value of slider 1 of group 1 of window "Control Center" of application process "ControlCenter" to ${normalized}`);
+        await runAppleScript(
+          `tell application "System Events" to set value of slider 1 of group 1 of window "Control Center" of application process "ControlCenter" to ${normalized}`
+        );
         return { content: [{ type: 'text', text: `Brightness set to ${level}%` }] };
       } catch {
         try {
           await execCommand('brightness', [String(normalized)]);
           return { content: [{ type: 'text', text: `Brightness set to ${level}%` }] };
         } catch {
-          return { content: [{ type: 'text', text: 'Brightness control not available (try installing: brew install brightness)' }], isError: true };
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Brightness control not available (try installing: brew install brightness)',
+              },
+            ],
+            isError: true,
+          };
         }
       }
-    }
+    },
   },
   {
     name: 'dark_mode_toggle',
@@ -52,9 +62,14 @@ export const displayTools: SystemTool[] = [
         `);
         return { content: [{ type: 'text', text: result }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'dark_mode_status',
@@ -75,9 +90,14 @@ export const displayTools: SystemTool[] = [
         `);
         return { content: [{ type: 'text', text: result }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'dnd_toggle',
@@ -96,8 +116,13 @@ export const displayTools: SystemTool[] = [
         `);
         return { content: [{ type: 'text', text: 'Focus mode toggled' }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
-  }
+    },
+  },
 ];

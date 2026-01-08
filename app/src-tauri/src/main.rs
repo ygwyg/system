@@ -7,15 +7,14 @@ mod config;
 
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
     Manager,
 };
 use std::sync::Mutex;
 
 struct AppState {
-    bridge_running: Mutex<bool>,
+    running: Mutex<bool>,
     tunnel_url: Mutex<Option<String>>,
-    deployed_url: Mutex<Option<String>>,
+    api_secret: Mutex<Option<String>>,
 }
 
 #[tauri::command]
@@ -23,8 +22,8 @@ async fn check_config() -> Result<serde_json::Value, String> {
     let config = config::load_config().map_err(|e| e.to_string())?;
     
     Ok(serde_json::json!({
-        "configured": config.auth_token.is_some() && config.anthropic_key.is_some(),
-        "deployedUrl": config.deployed_url,
+        "configured": config.anthropic_key.is_some(),
+        "tunnelUrl": config.tunnel_url,
     }))
 }
 
@@ -40,49 +39,104 @@ async fn request_permission(permission: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn deploy(api_key: String, mode: String) -> Result<serde_json::Value, String> {
-    // Save config
+async fn get_automation_apps() -> Result<Vec<String>, String> {
+    Ok(permissions::get_automation_apps())
+}
+
+#[tauri::command]
+async fn get_automation_apps_with_status() -> Result<Vec<(String, bool)>, String> {
+    Ok(permissions::get_automation_apps_with_status())
+}
+
+#[tauri::command]
+async fn prewarm_app(app_name: String) -> Result<bool, String> {
+    Ok(permissions::prewarm_app(&app_name))
+}
+
+#[tauri::command]
+async fn save_api_key(api_key: String) -> Result<(), String> {
     let mut config = config::load_config().unwrap_or_default();
     config.anthropic_key = Some(api_key);
-    config.mode = Some(mode.clone());
-    config::save_config(&config).map_err(|e| e.to_string())?;
     
-    if mode == "remote" {
-        // Run wrangler deploy
-        match bridge::deploy_to_cloudflare(&config).await {
-            Ok(url) => {
-                let mut config = config;
-                config.deployed = Some(true);
-                config.deployed_url = Some(url.clone());
-                config::save_config(&config).map_err(|e| e.to_string())?;
-                
-                Ok(serde_json::json!({
-                    "success": true,
-                    "url": url,
-                }))
+    // Find and save project root
+    match bridge::find_project_root(Some(&config)) {
+        Ok(root) => {
+            config.project_root = Some(root.to_string_lossy().to_string());
+        }
+        Err(e) => {
+            return Err(format!("Could not find SYSTEM project: {}", e));
+        }
+    }
+    
+    config::save_config(&config).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn start_local_server(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    // Generate a new secure token for this session
+    let token = bridge::generate_token();
+    
+    // Store the token in app state
+    *state.api_secret.lock().unwrap() = Some(token.clone());
+    
+    // Start the server with the generated token
+    bridge::start_local_server(&token).await.map_err(|e| e.to_string())?;
+    
+    // Return the token so frontend can display it
+    Ok(token)
+}
+
+#[tauri::command]
+async fn start_tunnel(state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
+    match bridge::start_tunnel_and_get_url().await {
+        Ok(url) => {
+            *state.tunnel_url.lock().unwrap() = Some(url.clone());
+            *state.running.lock().unwrap() = true;
+            
+            // Get the stored API secret
+            let api_secret = state.api_secret.lock().unwrap().clone();
+            
+            // Save tunnel URL to config
+            if let Ok(mut config) = config::load_config() {
+                config.tunnel_url = Some(url.clone());
+                let _ = config::save_config(&config);
             }
-            Err(e) => Ok(serde_json::json!({
-                "success": false,
-                "error": e.to_string(),
+            
+            Ok(serde_json::json!({
+                "success": true,
+                "url": url,
+                "apiSecret": api_secret,
             }))
         }
-    } else {
-        // Local mode - just save config
-        Ok(serde_json::json!({
-            "success": true,
+        Err(e) => Ok(serde_json::json!({
+            "success": false,
+            "error": e.to_string(),
         }))
     }
 }
 
 #[tauri::command]
-async fn show_logs(app: tauri::AppHandle) -> Result<(), String> {
-    // Open logs window or show in terminal
+async fn stop_system(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    bridge::stop_all().await.map_err(|e| e.to_string())?;
+    *state.running.lock().unwrap() = false;
+    *state.tunnel_url.lock().unwrap() = None;
     Ok(())
 }
 
 #[tauri::command]
-async fn show_preferences(app: tauri::AppHandle) -> Result<(), String> {
-    // Show preferences window
+async fn get_status(state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let running = *state.running.lock().unwrap();
+    let url = state.tunnel_url.lock().unwrap().clone();
+    
+    Ok(serde_json::json!({
+        "running": running,
+        "tunnelUrl": url,
+    }))
+}
+
+#[tauri::command]
+async fn show_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
@@ -91,23 +145,10 @@ async fn show_preferences(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn quit(app: tauri::AppHandle) -> Result<(), String> {
+async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
+    // Stop everything before quitting
+    let _ = bridge::stop_all().await;
     app.exit(0);
-    Ok(())
-}
-
-#[tauri::command]
-async fn start_bridge(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    // Start bridge process
-    bridge::start().await.map_err(|e| e.to_string())?;
-    *state.bridge_running.lock().unwrap() = true;
-    Ok(())
-}
-
-#[tauri::command]
-async fn stop_bridge(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    bridge::stop().await.map_err(|e| e.to_string())?;
-    *state.bridge_running.lock().unwrap() = false;
     Ok(())
 }
 
@@ -115,21 +156,21 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(AppState {
-            bridge_running: Mutex::new(false),
+            running: Mutex::new(false),
             tunnel_url: Mutex::new(None),
-            deployed_url: Mutex::new(None),
+            api_secret: Mutex::new(None),
         })
         .setup(|app| {
-            // Create system tray
+            // Create menu for the tray icon
             let menu = Menu::with_items(app, &[
                 &MenuItem::with_id(app, "open", "Open SYSTEM", true, None::<&str>)?,
                 &MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?,
             ])?;
             
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .menu(&menu)
-                .on_menu_event(|app, event| {
+            // Get the tray icon created by config and set its menu
+            if let Some(tray) = app.tray_by_id("main") {
+                tray.set_menu(Some(menu))?;
+                tray.on_menu_event(|app, event| {
                     match event.id.as_ref() {
                         "open" => {
                             if let Some(window) = app.get_webview_window("main") {
@@ -138,34 +179,19 @@ fn main() {
                             }
                         }
                         "quit" => {
+                            tauri::async_runtime::block_on(async {
+                                let _ = bridge::stop_all().await;
+                            });
                             app.exit(0);
                         }
                         _ => {}
                     }
-                })
-                .build(app)?;
+                });
+            }
             
-            // Check if configured, if so start bridge
-            if let Ok(config) = config::load_config() {
-                if config.auth_token.is_some() && config.anthropic_key.is_some() {
-                    // Already configured - start bridge in background
-                    let app_handle = app.handle().clone();
-                    tauri::async_runtime::spawn(async move {
-                        if let Err(e) = bridge::start().await {
-                            eprintln!("Failed to start bridge: {}", e);
-                        }
-                    });
-                } else {
-                    // Show onboarding window
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                    }
-                }
-            } else {
-                // No config - show onboarding
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                }
+            // Always show window on launch for now
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
             }
             
             Ok(())
@@ -174,12 +200,16 @@ fn main() {
             check_config,
             check_permissions,
             request_permission,
-            deploy,
-            show_logs,
-            show_preferences,
-            quit,
-            start_bridge,
-            stop_bridge,
+            get_automation_apps,
+            get_automation_apps_with_status,
+            prewarm_app,
+            save_api_key,
+            start_local_server,
+            start_tunnel,
+            stop_system,
+            get_status,
+            show_window,
+            quit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

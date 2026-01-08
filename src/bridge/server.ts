@@ -2,15 +2,12 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { allTools } from './tools/index.js';
 
 /**
  * Raycast MCP Bridge Server
- * 
+ *
  * This server exposes Raycast deep links as MCP tools, allowing
  * AI agents (like Cloudflare Agents) to control Raycast extensions.
  */
@@ -38,7 +35,7 @@ class RaycastBridgeServer {
     // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
-        tools: allTools.map(tool => ({
+        tools: allTools.map((tool) => ({
           name: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema,
@@ -51,14 +48,16 @@ class RaycastBridgeServer {
       const { name, arguments: args } = request.params;
 
       // Find the tool
-      const tool = allTools.find(t => t.name === name);
-      
+      const tool = allTools.find((t) => t.name === name);
+
       if (!tool) {
         return {
-          content: [{
-            type: 'text' as const,
-            text: `Error: Tool "${name}" not found. Available tools: ${allTools.map(t => t.name).join(', ')}`
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error: Tool "${name}" not found. Available tools: ${allTools.map((t) => t.name).join(', ')}`,
+            },
+          ],
           isError: true,
         };
       }
@@ -67,19 +66,21 @@ class RaycastBridgeServer {
         // Execute the tool
         const result = await tool.handler(args || {});
         return {
-          content: result.content.map(c => ({
+          content: result.content.map((c) => ({
             type: 'text' as const,
-            text: c.text
+            text: c.text,
           })),
           isError: result.isError,
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         return {
-          content: [{
-            type: 'text' as const,
-            text: `Error executing "${name}": ${errorMessage}`
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error executing "${name}": ${errorMessage}`,
+            },
+          ],
           isError: true,
         };
       }
@@ -100,11 +101,11 @@ class RaycastBridgeServer {
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    
+
     // Log to stderr so it doesn't interfere with MCP protocol on stdout
     console.error('Raycast Bridge MCP Server running...');
     console.error(`Available tools: ${allTools.length}`);
-    console.error('Tools:', allTools.map(t => t.name).join(', '));
+    console.error('Tools:', allTools.map((t) => t.name).join(', '));
   }
 }
 

@@ -2,7 +2,7 @@
  * Volume Tools - System volume controls
  */
 
-import { SystemTool } from './types.js';
+import type { SystemTool } from './types.js';
 import { runAppleScript } from './utils/command.js';
 
 export const volumeTools: SystemTool[] = [
@@ -12,9 +12,9 @@ export const volumeTools: SystemTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        level: { type: 'number', description: 'Volume level from 0 to 100' }
+        level: { type: 'number', description: 'Volume level from 0 to 100' },
       },
-      required: ['level']
+      required: ['level'],
     },
     handler: async (args) => {
       const level = Math.min(100, Math.max(0, Math.round(Number(args.level) || 50)));
@@ -22,12 +22,14 @@ export const volumeTools: SystemTool[] = [
         await runAppleScript(`set volume output volume ${level}`);
         return { content: [{ type: 'text', text: `Volume set to ${level}%` }] };
       } catch (error) {
-        return { 
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], 
-          isError: true 
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
         };
       }
-    }
+    },
   },
   {
     name: 'volume_get',
@@ -38,12 +40,14 @@ export const volumeTools: SystemTool[] = [
         const result = await runAppleScript('output volume of (get volume settings)');
         return { content: [{ type: 'text', text: `Volume: ${result}%` }] };
       } catch (error) {
-        return { 
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], 
-          isError: true 
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
         };
       }
-    }
+    },
   },
   {
     name: 'volume_up',
@@ -56,12 +60,14 @@ export const volumeTools: SystemTool[] = [
         await runAppleScript(`set volume output volume ${newLevel}`);
         return { content: [{ type: 'text', text: `Volume increased to ${newLevel}%` }] };
       } catch (error) {
-        return { 
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], 
-          isError: true 
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
         };
       }
-    }
+    },
   },
   {
     name: 'volume_down',
@@ -74,12 +80,14 @@ export const volumeTools: SystemTool[] = [
         await runAppleScript(`set volume output volume ${newLevel}`);
         return { content: [{ type: 'text', text: `Volume decreased to ${newLevel}%` }] };
       } catch (error) {
-        return { 
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], 
-          isError: true 
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
         };
       }
-    }
+    },
   },
   {
     name: 'volume_mute',
@@ -90,13 +98,19 @@ export const volumeTools: SystemTool[] = [
         const muted = await runAppleScript('output muted of (get volume settings)');
         const newState = muted === 'true' ? 'false' : 'true';
         await runAppleScript(`set volume output muted ${newState}`);
-        return { content: [{ type: 'text', text: newState === 'true' ? 'Volume muted' : 'Volume unmuted' }] };
+        return {
+          content: [
+            { type: 'text', text: newState === 'true' ? 'Volume muted' : 'Volume unmuted' },
+          ],
+        };
       } catch (error) {
-        return { 
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], 
-          isError: true 
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
         };
       }
-    }
-  }
+    },
+  },
 ];

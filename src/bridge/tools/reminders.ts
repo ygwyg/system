@@ -2,7 +2,7 @@
  * Reminders Tools - Apple Reminders management
  */
 
-import { SystemTool } from './types.js';
+import type { SystemTool } from './types.js';
 import { runAppleScript } from './utils/command.js';
 
 export const reminderTools: SystemTool[] = [
@@ -13,14 +13,15 @@ export const reminderTools: SystemTool[] = [
       type: 'object',
       properties: {
         list: { type: 'string', description: 'List name (default: "Reminders")' },
-        completed: { type: 'boolean', description: 'Include completed (default: false)' }
-      }
+        completed: { type: 'boolean', description: 'Include completed (default: false)' },
+      },
     },
     handler: async (args) => {
       const listName = String(args.list || 'Reminders').replace(/"/g, '\\"');
       const includeCompleted = args.completed === true;
       try {
-        const script = includeCompleted ? `
+        const script = includeCompleted
+          ? `
           tell application "Reminders"
             set output to ""
             set theList to list "${listName}"
@@ -32,7 +33,8 @@ export const reminderTools: SystemTool[] = [
             if output = "" then return "No reminders"
             return output
           end tell
-        ` : `
+        `
+          : `
           tell application "Reminders"
             set output to ""
             set theList to list "${listName}"
@@ -46,9 +48,14 @@ export const reminderTools: SystemTool[] = [
         const result = await runAppleScript(script);
         return { content: [{ type: 'text', text: result }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'reminders_create',
@@ -58,9 +65,12 @@ export const reminderTools: SystemTool[] = [
       properties: {
         title: { type: 'string', description: 'Reminder text' },
         list: { type: 'string', description: 'List name (default: "Reminders")' },
-        dueDate: { type: 'string', description: 'Due date (optional, e.g., "tomorrow", "in 2 hours")' }
+        dueDate: {
+          type: 'string',
+          description: 'Due date (optional, e.g., "tomorrow", "in 2 hours")',
+        },
       },
-      required: ['title']
+      required: ['title'],
     },
     handler: async (args) => {
       const title = String(args.title).replace(/"/g, '\\"');
@@ -76,9 +86,14 @@ export const reminderTools: SystemTool[] = [
         const result = await runAppleScript(script);
         return { content: [{ type: 'text', text: result }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'reminders_complete',
@@ -87,9 +102,9 @@ export const reminderTools: SystemTool[] = [
       type: 'object',
       properties: {
         title: { type: 'string', description: 'Reminder title (partial match)' },
-        list: { type: 'string', description: 'List name (default: "Reminders")' }
+        list: { type: 'string', description: 'List name (default: "Reminders")' },
       },
-      required: ['title']
+      required: ['title'],
     },
     handler: async (args) => {
       const title = String(args.title).replace(/"/g, '\\"');
@@ -107,8 +122,13 @@ export const reminderTools: SystemTool[] = [
         const result = await runAppleScript(script);
         return { content: [{ type: 'text', text: result }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
-  }
+    },
+  },
 ];

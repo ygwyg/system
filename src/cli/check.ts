@@ -2,7 +2,7 @@
 
 /**
  * SYSTEM Check
- * 
+ *
  * Pre-flight checks for permissions and dependencies.
  * Run this before setup or when things aren't working.
  */
@@ -29,7 +29,7 @@ const c = {
 };
 
 const log = (s: string) => console.log(s);
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const _sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ═══════════════════════════════════════════════════════════════
 // Check Functions
@@ -47,7 +47,7 @@ interface CheckResult {
 function checkNodeVersion(): CheckResult {
   const version = process.version;
   const major = parseInt(version.slice(1).split('.')[0]);
-  
+
   if (major >= 18) {
     return {
       name: 'Node.js',
@@ -55,7 +55,7 @@ function checkNodeVersion(): CheckResult {
       message: `${version} (>= 18 required)`,
     };
   }
-  
+
   return {
     name: 'Node.js',
     status: 'fail',
@@ -89,11 +89,11 @@ function checkCloudflared(): CheckResult {
 // wrangler auth
 function checkWranglerAuth(): CheckResult {
   try {
-    const output = execSync('npx wrangler whoami 2>&1', { 
+    const output = execSync('npx wrangler whoami 2>&1', {
       encoding: 'utf-8',
       timeout: 30000,
     });
-    
+
     // Check if logged in by looking for account info
     if (output.includes('You are logged in') || output.includes('Account Name')) {
       // Extract account name if possible
@@ -105,7 +105,7 @@ function checkWranglerAuth(): CheckResult {
         message: `Logged in (${accountName.slice(0, 20)})`,
       };
     }
-    
+
     return {
       name: 'Wrangler',
       status: 'warn',
@@ -128,10 +128,10 @@ function checkWranglerAuth(): CheckResult {
 function checkDependencies(): CheckResult {
   const rootModules = join(process.cwd(), 'node_modules');
   const agentModules = join(process.cwd(), 'cloudflare-agent', 'node_modules');
-  
+
   const hasRoot = existsSync(rootModules);
   const hasAgent = existsSync(agentModules);
-  
+
   if (hasRoot && hasAgent) {
     return {
       name: 'Dependencies',
@@ -139,7 +139,7 @@ function checkDependencies(): CheckResult {
       message: 'All installed',
     };
   }
-  
+
   if (!hasRoot && !hasAgent) {
     return {
       name: 'Dependencies',
@@ -149,7 +149,7 @@ function checkDependencies(): CheckResult {
       fixCommand: 'npm install && cd cloudflare-agent && npm install',
     };
   }
-  
+
   if (!hasAgent) {
     return {
       name: 'Dependencies',
@@ -159,7 +159,7 @@ function checkDependencies(): CheckResult {
       fixCommand: 'cd cloudflare-agent && npm install',
     };
   }
-  
+
   return {
     name: 'Dependencies',
     status: 'fail',
@@ -172,7 +172,7 @@ function checkDependencies(): CheckResult {
 // Config exists
 function checkConfig(): CheckResult {
   const configPath = join(process.cwd(), 'bridge.config.json');
-  
+
   if (!existsSync(configPath)) {
     return {
       name: 'Config',
@@ -182,10 +182,10 @@ function checkConfig(): CheckResult {
       fixCommand: 'npm run setup',
     };
   }
-  
+
   try {
     const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-    
+
     if (!config.authToken) {
       return {
         name: 'Config',
@@ -195,7 +195,7 @@ function checkConfig(): CheckResult {
         fixCommand: 'npm run setup',
       };
     }
-    
+
     if (!config.anthropicKey) {
       return {
         name: 'Config',
@@ -205,7 +205,7 @@ function checkConfig(): CheckResult {
         fixCommand: 'npm run setup',
       };
     }
-    
+
     return {
       name: 'Config',
       status: 'pass',
@@ -228,31 +228,33 @@ function checkConfig(): CheckResult {
 
 function getTerminalAppName(): string {
   const termProgram = process.env.TERM_PROGRAM || '';
-  
+
   if (termProgram.includes('iTerm')) return 'iTerm';
   if (termProgram.includes('Apple_Terminal')) return 'Terminal';
   if (termProgram.includes('vscode') || termProgram.includes('Code')) return 'Visual Studio Code';
   if (termProgram.includes('cursor')) return 'Cursor';
   if (termProgram.includes('Warp')) return 'Warp';
-  
+
   try {
     let pid = process.ppid;
     for (let i = 0; i < 5; i++) {
       const comm = execSync(`ps -p ${pid} -o comm=`, { encoding: 'utf-8' }).trim();
       const name = comm.split('/').pop() || '';
-      
+
       if (name.includes('Terminal')) return 'Terminal';
       if (name.includes('iTerm')) return 'iTerm';
       if (name.includes('Code')) return 'Visual Studio Code';
       if (name.includes('Cursor')) return 'Cursor';
       if (name.includes('Warp')) return 'Warp';
-      
+
       const ppid = execSync(`ps -p ${pid} -o ppid=`, { encoding: 'utf-8' }).trim();
       if (!ppid || ppid === '1' || ppid === '0') break;
       pid = parseInt(ppid);
     }
-  } catch {}
-  
+  } catch {
+    // Process tree walk failed, fall back to default
+  }
+
   return 'Terminal';
 }
 
@@ -279,7 +281,10 @@ function checkFullDiskAccess(): CheckResult {
 
 function checkAccessibility(): CheckResult {
   try {
-    execSync(`osascript -e 'tell application "System Events" to return name of first process' 2>/dev/null`, { stdio: 'pipe' });
+    execSync(
+      `osascript -e 'tell application "System Events" to return name of first process' 2>/dev/null`,
+      { stdio: 'pipe' }
+    );
     return {
       name: 'Accessibility',
       status: 'pass',
@@ -292,14 +297,17 @@ function checkAccessibility(): CheckResult {
       status: 'fail',
       message: `Not granted - add ${app}`,
       fix: `Add "${app}" to Accessibility in System Settings`,
-      fixCommand: 'open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"',
+      fixCommand:
+        'open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"',
     };
   }
 }
 
 function checkContacts(): CheckResult {
   try {
-    execSync(`osascript -e 'tell application "Contacts" to return count of people' 2>/dev/null`, { stdio: 'pipe' });
+    execSync(`osascript -e 'tell application "Contacts" to return count of people' 2>/dev/null`, {
+      stdio: 'pipe',
+    });
     return {
       name: 'Contacts',
       status: 'pass',
@@ -320,7 +328,10 @@ function checkContacts(): CheckResult {
 function checkAutomation(): CheckResult {
   try {
     // Try to get the name of the frontmost app - requires Automation permission
-    execSync(`osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true' 2>/dev/null`, { stdio: 'pipe' });
+    execSync(
+      `osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true' 2>/dev/null`,
+      { stdio: 'pipe' }
+    );
     return {
       name: 'Automation',
       status: 'pass',
@@ -342,16 +353,20 @@ function checkAutomation(): CheckResult {
 // ═══════════════════════════════════════════════════════════════
 
 function displayResult(result: CheckResult, showFix = true): void {
-  const icon = result.status === 'pass' ? `${c.green}✓` : 
-               result.status === 'fail' ? `${c.red}✗` : 
-               `${c.yellow}⚠`;
-  
-  const statusColor = result.status === 'pass' ? c.green : 
-                      result.status === 'fail' ? c.red : 
-                      c.yellow;
-  
-  log(`  ${icon} ${c.white}${result.name.padEnd(18)}${c.reset} ${statusColor}${result.message}${c.reset}`);
-  
+  const icon =
+    result.status === 'pass'
+      ? `${c.green}✓`
+      : result.status === 'fail'
+        ? `${c.red}✗`
+        : `${c.yellow}⚠`;
+
+  const statusColor =
+    result.status === 'pass' ? c.green : result.status === 'fail' ? c.red : c.yellow;
+
+  log(
+    `  ${icon} ${c.white}${result.name.padEnd(18)}${c.reset} ${statusColor}${result.message}${c.reset}`
+  );
+
   if (showFix && result.fix && result.status !== 'pass') {
     log(`    ${c.dim}→ ${result.fix}${c.reset}`);
     if (result.fixCommand) {
@@ -367,18 +382,20 @@ function displayResult(result: CheckResult, showFix = true): void {
 async function main() {
   const args = process.argv.slice(2);
   const fixMode = args.includes('--fix');
-  const quietMode = args.includes('--quiet');
-  
+  const _quietMode = args.includes('--quiet');
+
   log('');
   log(`${c.green}┌─────────────────────────────────────┐${c.reset}`);
-  log(`${c.green}│${c.reset} ${c.bright}${c.bold}SYSTEM${c.reset} ${c.dim}Pre-flight Check${c.reset}            ${c.green}│${c.reset}`);
+  log(
+    `${c.green}│${c.reset} ${c.bright}${c.bold}SYSTEM${c.reset} ${c.dim}Pre-flight Check${c.reset}            ${c.green}│${c.reset}`
+  );
   log(`${c.green}└─────────────────────────────────────┘${c.reset}`);
   log('');
-  
+
   // System checks
   log(`${c.white}${c.bold}System${c.reset}`);
   log('');
-  
+
   const systemChecks = [
     checkNodeVersion(),
     checkDependencies(),
@@ -386,66 +403,67 @@ async function main() {
     checkWranglerAuth(),
     checkConfig(),
   ];
-  
+
   for (const result of systemChecks) {
     displayResult(result);
   }
-  
+
   log('');
-  
+
   // Permission checks (macOS only)
   if (process.platform === 'darwin') {
     log(`${c.white}${c.bold}macOS Permissions${c.reset}`);
     log('');
-    
+
     const permissionChecks = [
       checkFullDiskAccess(),
       checkAccessibility(),
       checkContacts(),
       checkAutomation(),
     ];
-    
+
     for (const result of permissionChecks) {
       displayResult(result);
     }
-    
+
     log('');
   }
-  
+
   // Summary
   const allChecks = [
     ...systemChecks,
-    ...(process.platform === 'darwin' ? [
-      checkFullDiskAccess(),
-      checkAccessibility(),
-      checkContacts(),
-      checkAutomation(),
-    ] : []),
+    ...(process.platform === 'darwin'
+      ? [checkFullDiskAccess(), checkAccessibility(), checkContacts(), checkAutomation()]
+      : []),
   ];
-  
-  const failures = allChecks.filter(r => r.status === 'fail');
-  const warnings = allChecks.filter(r => r.status === 'warn');
-  
+
+  const failures = allChecks.filter((r) => r.status === 'fail');
+  const warnings = allChecks.filter((r) => r.status === 'warn');
+
   if (failures.length === 0 && warnings.length === 0) {
-    log(`${c.green}${c.bold}All checks passed!${c.reset} Run ${c.cyan}npm start${c.reset} to begin.`);
+    log(
+      `${c.green}${c.bold}All checks passed!${c.reset} Run ${c.cyan}npm start${c.reset} to begin.`
+    );
     log('');
     process.exit(0);
   }
-  
+
   if (failures.length > 0) {
     log(`${c.red}${c.bold}${failures.length} issue(s) need fixing${c.reset}`);
-    
+
     if (fixMode) {
       log('');
       log(`${c.dim}Attempting to fix...${c.reset}`);
-      
+
       for (const failure of failures) {
         if (failure.fixCommand) {
           log(`${c.dim}Running: ${failure.fixCommand}${c.reset}`);
           try {
             if (failure.fixCommand.startsWith('open ')) {
               execSync(failure.fixCommand, { stdio: 'ignore' });
-              log(`${c.yellow}→ Opened System Settings. Grant permission and re-run this check.${c.reset}`);
+              log(
+                `${c.yellow}→ Opened System Settings. Grant permission and re-run this check.${c.reset}`
+              );
             } else {
               execSync(failure.fixCommand, { stdio: 'inherit' });
               log(`${c.green}✓ Fixed${c.reset}`);
@@ -456,20 +474,24 @@ async function main() {
         }
       }
     } else {
-      log(`${c.dim}Run ${c.cyan}npm run check -- --fix${c.reset}${c.dim} to attempt automatic fixes${c.reset}`);
+      log(
+        `${c.dim}Run ${c.cyan}npm run check -- --fix${c.reset}${c.dim} to attempt automatic fixes${c.reset}`
+      );
     }
     log('');
     process.exit(1);
   }
-  
+
   if (warnings.length > 0) {
-    log(`${c.yellow}${warnings.length} warning(s)${c.reset} ${c.dim}(non-blocking, some features may not work)${c.reset}`);
+    log(
+      `${c.yellow}${warnings.length} warning(s)${c.reset} ${c.dim}(non-blocking, some features may not work)${c.reset}`
+    );
     log('');
     process.exit(0);
   }
 }
 
-main().catch(e => {
+main().catch((e) => {
   console.error(`${c.red}Error: ${e.message}${c.reset}`);
   process.exit(1);
 });

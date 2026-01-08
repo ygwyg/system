@@ -2,7 +2,7 @@
  * Notes Tools - Apple Notes management
  */
 
-import { SystemTool } from './types.js';
+import type { SystemTool } from './types.js';
 import { runAppleScript } from './utils/command.js';
 
 export const notesTools: SystemTool[] = [
@@ -12,8 +12,8 @@ export const notesTools: SystemTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        count: { type: 'number', description: 'Number of notes to list (default 10)' }
-      }
+        count: { type: 'number', description: 'Number of notes to list (default 10)' },
+      },
     },
     handler: async (args) => {
       const count = Math.min(20, Math.max(1, Number(args.count) || 10));
@@ -30,9 +30,14 @@ export const notesTools: SystemTool[] = [
         `);
         return { content: [{ type: 'text', text: result || 'No notes found' }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'notes_search',
@@ -40,9 +45,9 @@ export const notesTools: SystemTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Search term' }
+        query: { type: 'string', description: 'Search term' },
       },
-      required: ['query']
+      required: ['query'],
     },
     handler: async (args) => {
       const query = String(args.query).replace(/"/g, '\\"');
@@ -60,9 +65,14 @@ export const notesTools: SystemTool[] = [
         `);
         return { content: [{ type: 'text', text: result }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'notes_create',
@@ -71,9 +81,9 @@ export const notesTools: SystemTool[] = [
       type: 'object',
       properties: {
         title: { type: 'string', description: 'Note title' },
-        body: { type: 'string', description: 'Note content' }
+        body: { type: 'string', description: 'Note content' },
       },
-      required: ['title']
+      required: ['title'],
     },
     handler: async (args) => {
       const title = String(args.title).replace(/"/g, '\\"');
@@ -86,9 +96,14 @@ export const notesTools: SystemTool[] = [
         `);
         return { content: [{ type: 'text', text: `Created note: ${title}` }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'notes_read',
@@ -96,9 +111,9 @@ export const notesTools: SystemTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'Note title (partial match)' }
+        title: { type: 'string', description: 'Note title (partial match)' },
       },
-      required: ['title']
+      required: ['title'],
     },
     handler: async (args) => {
       const title = String(args.title).replace(/"/g, '\\"');
@@ -112,9 +127,14 @@ export const notesTools: SystemTool[] = [
         `);
         return { content: [{ type: 'text', text: result }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'notes_append',
@@ -123,9 +143,9 @@ export const notesTools: SystemTool[] = [
       type: 'object',
       properties: {
         title: { type: 'string', description: 'Note title (partial match)' },
-        text: { type: 'string', description: 'Text to append' }
+        text: { type: 'string', description: 'Text to append' },
       },
-      required: ['title', 'text']
+      required: ['title', 'text'],
     },
     handler: async (args) => {
       const title = String(args.title).replace(/"/g, '\\"');
@@ -141,8 +161,13 @@ export const notesTools: SystemTool[] = [
         `);
         return { content: [{ type: 'text', text: `Appended to: ${title}` }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
-  }
+    },
+  },
 ];

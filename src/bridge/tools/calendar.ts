@@ -2,13 +2,13 @@
  * Calendar Tools - Apple Calendar management
  */
 
-import { SystemTool } from './types.js';
+import type { SystemTool } from './types.js';
 import { runAppleScript } from './utils/command.js';
 
 export const calendarTools: SystemTool[] = [
   {
     name: 'calendar_today',
-    description: 'Get today\'s calendar events',
+    description: "Get today's calendar events",
     inputSchema: { type: 'object', properties: {} },
     handler: async () => {
       try {
@@ -33,9 +33,14 @@ export const calendarTools: SystemTool[] = [
         const result = await runAppleScript(script);
         return { content: [{ type: 'text', text: result }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'calendar_upcoming',
@@ -43,8 +48,8 @@ export const calendarTools: SystemTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        days: { type: 'number', description: 'Number of days to look ahead (default 3)' }
-      }
+        days: { type: 'number', description: 'Number of days to look ahead (default 3)' },
+      },
     },
     handler: async (args) => {
       const days = Math.min(7, Math.max(1, Number(args.days) || 3));
@@ -71,9 +76,14 @@ export const calendarTools: SystemTool[] = [
         const result = await runAppleScript(script);
         return { content: [{ type: 'text', text: result }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'calendar_create',
@@ -84,9 +94,9 @@ export const calendarTools: SystemTool[] = [
         title: { type: 'string', description: 'Event title' },
         date: { type: 'string', description: 'Date (e.g., "tomorrow", "2024-01-15")' },
         time: { type: 'string', description: 'Start time (e.g., "2pm", "14:00")' },
-        duration: { type: 'number', description: 'Duration in minutes (default 60)' }
+        duration: { type: 'number', description: 'Duration in minutes (default 60)' },
       },
-      required: ['title', 'date', 'time']
+      required: ['title', 'date', 'time'],
     },
     handler: async (args) => {
       const title = String(args.title).replace(/"/g, '\\"');
@@ -107,9 +117,14 @@ export const calendarTools: SystemTool[] = [
         const result = await runAppleScript(script);
         return { content: [{ type: 'text', text: result }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'calendar_next',
@@ -140,8 +155,13 @@ export const calendarTools: SystemTool[] = [
         const result = await runAppleScript(script);
         return { content: [{ type: 'text', text: result }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
-  }
+    },
+  },
 ];

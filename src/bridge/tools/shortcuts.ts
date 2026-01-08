@@ -2,7 +2,7 @@
  * Shortcuts Tools - Apple Shortcuts integration
  */
 
-import { SystemTool } from './types.js';
+import type { SystemTool } from './types.js';
 import { execCommand } from './utils/command.js';
 
 export const shortcutsTools: SystemTool[] = [
@@ -13,9 +13,9 @@ export const shortcutsTools: SystemTool[] = [
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Shortcut name' },
-        input: { type: 'string', description: 'Optional input text' }
+        input: { type: 'string', description: 'Optional input text' },
       },
-      required: ['name']
+      required: ['name'],
     },
     handler: async (args) => {
       const name = String(args.name);
@@ -26,9 +26,14 @@ export const shortcutsTools: SystemTool[] = [
         await execCommand('shortcuts', cmdArgs);
         return { content: [{ type: 'text', text: `Ran shortcut: ${name}` }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   },
   {
     name: 'shortcut_list',
@@ -39,8 +44,13 @@ export const shortcutsTools: SystemTool[] = [
         const { stdout } = await execCommand('shortcuts', ['list']);
         return { content: [{ type: 'text', text: stdout.trim() || 'No shortcuts found' }] };
       } catch (error) {
-        return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], isError: true };
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
+        };
       }
-    }
-  }
+    },
+  },
 ];

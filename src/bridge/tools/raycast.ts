@@ -6,8 +6,8 @@ import open from 'open';
 import { z } from 'zod';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { SystemTool, BridgeConfig } from './types.js';
-import { runAppleScript } from './utils/command.js';
+import type { SystemTool, BridgeConfig } from './types.js';
+
 import { schemas } from './utils/validation.js';
 
 /**
@@ -20,7 +20,7 @@ interface ExtensionCommand {
   arguments?: { name: string; type: string; description: string; required?: boolean }[];
 }
 
-interface ExtensionConfig {
+interface _ExtensionConfig {
   name: string;
   author: string;
   owner?: string;
@@ -36,16 +36,18 @@ export function loadConfig(): BridgeConfig {
     join(process.cwd(), 'bridge.config.json'),
     join(process.cwd(), 'config.json'),
   ];
-  
+
   for (const configPath of configPaths) {
     if (existsSync(configPath)) {
       try {
         const content = readFileSync(configPath, 'utf-8');
         return JSON.parse(content);
-      } catch {}
+      } catch (error) {
+        console.error(`Failed to parse config at ${configPath}:`, error);
+      }
     }
   }
-  
+
   return { extensions: [] };
 }
 
@@ -54,21 +56,21 @@ export function loadConfig(): BridgeConfig {
  */
 export function generateExtensionTools(config: BridgeConfig): SystemTool[] {
   const tools: SystemTool[] = [];
-  
+
   if (!config.extensions) return tools;
-  
+
   for (const ext of config.extensions) {
     for (const cmd of ext.commands) {
       const toolName = `${ext.name.replace(/-/g, '_')}_${cmd.name.replace(/-/g, '_')}`;
-      
+
       const properties: Record<string, unknown> = {};
       const required: string[] = [];
-      
+
       properties['text'] = {
         type: 'string',
         description: 'Text to pre-fill in the command (optional)',
       };
-      
+
       if (cmd.arguments) {
         for (const arg of cmd.arguments) {
           properties[arg.name] = {
@@ -80,7 +82,7 @@ export function generateExtensionTools(config: BridgeConfig): SystemTool[] {
           }
         }
       }
-      
+
       tools.push({
         name: toolName,
         description: `${cmd.title}: ${cmd.description}`,
@@ -93,21 +95,21 @@ export function generateExtensionTools(config: BridgeConfig): SystemTool[] {
           const extensionOwner = ext.owner || ext.author;
           let url = `raycast://extensions/${extensionOwner}/${ext.name}/${cmd.name}`;
           const params = new URLSearchParams();
-          
+
           const text = args['text'];
           const hasExplicitArguments = cmd.arguments && cmd.arguments.length > 0;
-          
+
           const explicitArgs: Record<string, unknown> = {};
           for (const [key, value] of Object.entries(args)) {
             if (key !== 'text' && value !== undefined && value !== null && value !== '') {
               explicitArgs[key] = value;
             }
           }
-          
-          if (text && !explicitArgs['title'] && cmd.arguments?.some(a => a.name === 'title')) {
+
+          if (text && !explicitArgs['title'] && cmd.arguments?.some((a) => a.name === 'title')) {
             explicitArgs['title'] = text;
           }
-          
+
           if (hasExplicitArguments) {
             if (Object.keys(explicitArgs).length > 0) {
               params.set('arguments', JSON.stringify(explicitArgs));
@@ -117,68 +119,60 @@ export function generateExtensionTools(config: BridgeConfig): SystemTool[] {
               params.set('fallbackText', text);
             }
           }
-          
+
           const queryString = params.toString();
           if (queryString) {
             url += `?${queryString}`;
           }
-          
+
           await open(url);
           return {
-            content: [{
-              type: 'text',
-              text: `Executed: ${cmd.title} (${url})`
-            }]
+            content: [
+              {
+                type: 'text',
+                text: `Executed: ${cmd.title} (${url})`,
+              },
+            ],
           };
-        }
+        },
       });
     }
   }
-  
+
   return tools;
 }
 
 export const raycastTools: SystemTool[] = [
   {
     name: 'raycast_search',
-    description: 'Open Raycast and type a search query. Raycast will find matching commands, apps, or actions. This is the easiest way to do anything on Mac.',
+    description:
+      'Open Raycast and type a search query. Raycast will find matching commands, apps, or actions. This is the easiest way to do anything on Mac. The user will need to press Enter to execute the matched command.',
     inputSchema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'What to search for in Raycast (e.g., "tweet hello world", "create note", "play spotify", "open twitter")'
+          description:
+            'What to search for in Raycast (e.g., "tweet hello world", "create note", "play spotify", "open twitter")',
         },
-        autoSend: {
-          type: 'boolean', 
-          description: 'Auto-submit with cmd+enter after a delay (default: true for tweets/posts)'
-        }
       },
-      required: ['query']
+      required: ['query'],
     },
     handler: async (args) => {
       const query = String(args.query);
-      const autoSend = args.autoSend !== false;
-      
+
       const url = `raycast://?fallbackText=${encodeURIComponent(query)}`;
       await open(url);
-      
-      if (autoSend) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        await runAppleScript(`
-          tell application "System Events"
-            key code 36 using {command down}
-          end tell
-        `);
-      }
-      
+
       return {
-        content: [{
-          type: 'text',
-          text: `Opened Raycast with: "${query}"${autoSend ? ' (auto-sent)' : ''}`
-        }]
+        content: [
+          {
+            type: 'text',
+            text: `Opened Raycast with: "${query}" - press Enter to execute`,
+          },
+        ],
       };
-    }
+    },
   },
   {
     name: 'raycast_confetti',
@@ -187,7 +181,7 @@ export const raycastTools: SystemTool[] = [
     handler: async () => {
       await open('raycast://confetti');
       return { content: [{ type: 'text', text: 'Confetti!' }] };
-    }
+    },
   },
   {
     name: 'raycast_ai',
@@ -195,69 +189,80 @@ export const raycastTools: SystemTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        prompt: { type: 'string', description: 'Question or task for Raycast AI' }
+        prompt: { type: 'string', description: 'Question or task for Raycast AI' },
       },
-      required: ['prompt']
+      required: ['prompt'],
     },
     handler: async (args) => {
       const prompt = String(args.prompt);
       const url = `raycast://ai?prompt=${encodeURIComponent(prompt)}`;
       await open(url);
       return { content: [{ type: 'text', text: `Asked Raycast AI: "${prompt}"` }] };
-    }
+    },
   },
   {
     name: 'raycast',
-    description: 'Execute any Raycast extension command. Use format: extension "author/name", command "command-name". Check Raycast store for extension details.',
+    description:
+      'Execute any Raycast extension command. Use format: extension "author/name", command "command-name". Check Raycast store for extension details.',
     inputSchema: {
       type: 'object',
       properties: {
         extension: {
           type: 'string',
-          description: 'Extension as "author/name" (e.g., "raycast/github", "linear/linear", "mattisssa/spotify-player")'
+          description:
+            'Extension as "author/name" (e.g., "raycast/github", "linear/linear", "mattisssa/spotify-player")',
         },
         command: {
           type: 'string',
-          description: 'Command to run (e.g., "search-repositories", "create-issue", "play")'
+          description: 'Command to run (e.g., "search-repositories", "create-issue", "play")',
         },
         text: {
           type: 'string',
-          description: 'Optional text to pre-fill in the command'
+          description: 'Optional text to pre-fill in the command',
         },
         arguments: {
           type: 'object',
-          description: 'Optional arguments object for the command'
-        }
+          description: 'Optional arguments object for the command',
+        },
       },
-      required: ['extension', 'command']
+      required: ['extension', 'command'],
     },
     handler: async (args) => {
-      const { extension, command, text, arguments: cmdArgs } = schemas.raycastCommand.extend({
-        text: z.string().optional(),
-      }).parse(args);
-      
+      const {
+        extension,
+        command,
+        text,
+        arguments: cmdArgs,
+      } = schemas.raycastCommand
+        .extend({
+          text: z.string().optional(),
+        })
+        .parse(args);
+
       let url = `raycast://extensions/${extension}/${command}`;
       const params = new URLSearchParams();
-      
+
       if (text) {
         params.set('fallbackText', text);
       }
       if (cmdArgs && Object.keys(cmdArgs).length > 0) {
         params.set('arguments', JSON.stringify(cmdArgs));
       }
-      
+
       const queryString = params.toString();
       if (queryString) {
         url += `?${queryString}`;
       }
-      
+
       await open(url);
       return {
-        content: [{
-          type: 'text',
-          text: `Executed: ${extension}/${command}`
-        }]
+        content: [
+          {
+            type: 'text',
+            text: `Executed: ${extension}/${command}`,
+          },
+        ],
       };
-    }
-  }
+    },
+  },
 ];

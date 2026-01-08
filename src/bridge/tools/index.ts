@@ -7,7 +7,13 @@ export { ToolResult, SystemTool, BridgeConfig } from './types.js';
 
 // Utils
 export { execCommand, runAppleScript } from './utils/command.js';
-export { schemas, validateShellCommand, SAFE_SHELL_COMMANDS, BLOCKED_PATHS, containsBlockedPath } from './utils/validation.js';
+export {
+  schemas,
+  validateShellCommand,
+  SAFE_SHELL_COMMANDS,
+  BLOCKED_PATHS,
+  containsBlockedPath,
+} from './utils/validation.js';
 
 // Tool categories
 export { coreTools } from './core.js';
@@ -53,22 +59,22 @@ const configuredExtensionTools = generateExtensionTools(config);
 
 // Export all tools - organized by category
 export const allTools = [
-  ...coreTools,              // open_url, open_app, applescript, shell, shell_list
-  ...raycastTools,           // raycast_search, raycast_confetti, raycast_ai, raycast
-  ...musicTools,             // music_play, pause, next, previous, current
-  ...volumeTools,            // volume_set, get, up, down, mute
-  ...systemTools,            // notify, say, wait, clipboard_get, clipboard_set
-  ...messagingTools,         // read_imessages, send_imessage, search_contacts
-  ...screenshotTools,        // screenshot, get_screen_size
-  ...inputTools,             // mouse_click, mouse_move, keyboard_type, keyboard_key, mouse_drag, scroll
-  ...calendarTools,          // calendar_today, upcoming, create, next
-  ...reminderTools,          // reminders_list, create, complete
-  ...statusTools,            // battery, wifi, storage, running_apps, front_app
-  ...displayTools,           // brightness, dark_mode, dnd
-  ...screenTools,            // lock_screen, sleep_display, sleep_mac
-  ...notesTools,             // notes_list, search, create, read, append
-  ...finderTools,            // finder_search, downloads, desktop, reveal, trash
-  ...shortcutsTools,         // shortcut_run, list
-  ...browserTools,           // browser_url, tabs
-  ...configuredExtensionTools,  // user's raycast extensions
+  ...coreTools, // open_url, open_app, applescript, shell, shell_list
+  ...raycastTools, // raycast_search, raycast_confetti, raycast_ai, raycast
+  ...musicTools, // music_play, pause, next, previous, current
+  ...volumeTools, // volume_set, get, up, down, mute
+  ...systemTools, // notify, say, wait, clipboard_get, clipboard_set
+  ...messagingTools, // read_imessages, send_imessage, search_contacts
+  ...screenshotTools, // screenshot, get_screen_size
+  ...inputTools, // mouse_click, mouse_move, keyboard_type, keyboard_key, mouse_drag, scroll
+  ...calendarTools, // calendar_today, upcoming, create, next
+  ...reminderTools, // reminders_list, create, complete
+  ...statusTools, // battery, wifi, storage, running_apps, front_app
+  ...displayTools, // brightness, dark_mode, dnd
+  ...screenTools, // lock_screen, sleep_display, sleep_mac
+  ...notesTools, // notes_list, search, create, read, append
+  ...finderTools, // finder_search, downloads, desktop, reveal, trash
+  ...shortcutsTools, // shortcut_run, list
+  ...browserTools, // browser_url, tabs
+  ...configuredExtensionTools, // user's raycast extensions
 ];

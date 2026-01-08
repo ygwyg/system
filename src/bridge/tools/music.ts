@@ -2,7 +2,7 @@
  * Music Tools - Apple Music control
  */
 
-import { SystemTool } from './types.js';
+import type { SystemTool } from './types.js';
 import { runAppleScript } from './utils/command.js';
 
 export const musicTools: SystemTool[] = [
@@ -14,13 +14,13 @@ export const musicTools: SystemTool[] = [
       properties: {
         query: {
           type: 'string',
-          description: 'Optional song, artist, or album to search and play'
-        }
-      }
+          description: 'Optional song, artist, or album to search and play',
+        },
+      },
     },
     handler: async (args) => {
       const query = args.query as string | undefined;
-      
+
       try {
         if (query) {
           const escapedQuery = query.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -42,12 +42,14 @@ export const musicTools: SystemTool[] = [
           return { content: [{ type: 'text', text: 'Music playing' }] };
         }
       } catch (error) {
-        return { 
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], 
-          isError: true 
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
         };
       }
-    }
+    },
   },
   {
     name: 'music_pause',
@@ -58,12 +60,14 @@ export const musicTools: SystemTool[] = [
         await runAppleScript('tell application "Music" to pause');
         return { content: [{ type: 'text', text: 'Music paused' }] };
       } catch (error) {
-        return { 
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], 
-          isError: true 
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
         };
       }
-    }
+    },
   },
   {
     name: 'music_next',
@@ -72,16 +76,20 @@ export const musicTools: SystemTool[] = [
     handler: async () => {
       try {
         await runAppleScript('tell application "Music" to next track');
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const track = await runAppleScript('tell application "Music" to return name of current track');
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const track = await runAppleScript(
+          'tell application "Music" to return name of current track'
+        );
         return { content: [{ type: 'text', text: `Next track: ${track}` }] };
       } catch (error) {
-        return { 
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], 
-          isError: true 
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
         };
       }
-    }
+    },
   },
   {
     name: 'music_previous',
@@ -90,16 +98,20 @@ export const musicTools: SystemTool[] = [
     handler: async () => {
       try {
         await runAppleScript('tell application "Music" to previous track');
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const track = await runAppleScript('tell application "Music" to return name of current track');
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const track = await runAppleScript(
+          'tell application "Music" to return name of current track'
+        );
         return { content: [{ type: 'text', text: `Previous track: ${track}` }] };
       } catch (error) {
-        return { 
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` }], 
-          isError: true 
+        return {
+          content: [
+            { type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown'}` },
+          ],
+          isError: true,
         };
       }
-    }
+    },
   },
   {
     name: 'music_current',
@@ -114,6 +126,6 @@ export const musicTools: SystemTool[] = [
       } catch {
         return { content: [{ type: 'text', text: 'No track playing' }] };
       }
-    }
-  }
+    },
+  },
 ];
