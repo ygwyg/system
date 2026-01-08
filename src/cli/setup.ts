@@ -136,8 +136,14 @@ async function clearContent(): Promise<void> {
   }
 }
 
+// Strip ANSI codes to get visible length
+function visibleLength(str: string): number {
+  return str.replace(/\x1b\[[0-9;]*m/g, '').length;
+}
+
 async function showMessage(row: number, message: string, color = c.white): Promise<void> {
-  moveTo(row, Math.floor((cols - message.length) / 2));
+  const len = visibleLength(message);
+  moveTo(row, Math.floor((cols - len) / 2));
   write(color + message + c.reset);
 }
 
