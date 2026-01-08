@@ -18,6 +18,9 @@ export interface Env {
   BRIDGE_AUTH_TOKEN: string;
   API_SECRET: string;
   SystemAgent: DurableObjectNamespace<SystemAgent>;
+  // Model configuration (optional - defaults provided)
+  MODEL_FAST?: string;  // For quick tasks like intent classification
+  MODEL_SMART?: string; // For complex reasoning and vision
 }
 
 type MessageContent = 
@@ -1146,7 +1149,7 @@ Category:`;
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({ 
-          model: "claude-3-5-haiku-20241022", 
+          model: this.env.MODEL_FAST || "claude-3-5-haiku-20241022", 
           max_tokens: 20, 
           messages: [{ role: "user", content: classifierPrompt }] 
         }),
@@ -1168,7 +1171,7 @@ Category:`;
         "x-api-key": this.env.ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({ model: "claude-opus-4-5-20251101", max_tokens: 4096, system: systemPrompt, messages }),
+      body: JSON.stringify({ model: this.env.MODEL_SMART || "claude-sonnet-4-20250514", max_tokens: 4096, system: systemPrompt, messages }),
     });
 
     if (!response.ok) throw new Error(`Claude API error: ${response.status}`);
@@ -1213,7 +1216,7 @@ Category:`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({ 
-        model: "claude-opus-4-5-20251101", 
+        model: this.env.MODEL_SMART || "claude-sonnet-4-20250514", 
         max_tokens: 4096, 
         system: systemPrompt, 
         messages: visionMessages 

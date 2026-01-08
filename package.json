@@ -9,6 +9,7 @@
   "scripts": {
     "setup": "node dist/cli/setup.js",
     "start": "node dist/cli/start.js",
+    "check": "node dist/cli/check.js",
     "dev": "node dist/bridge/http-server.js",
     "build": "tsc",
     "postinstall": "npm run build || true"

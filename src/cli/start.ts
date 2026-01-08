@@ -4,6 +4,8 @@
  * SYSTEM Start
  * 
  * Starts all services based on configuration.
+ * - Local mode: Bridge + Local agent
+ * - Remote mode: Bridge + Tunnel + (uses deployed worker)
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
@@ -18,12 +20,15 @@ import { homedir } from 'os';
 interface Config {
   authToken: string;
   anthropicKey: string;
-  mode: 'ui' | 'api';
-  access: 'local' | 'remote';
+  mode: 'local' | 'remote';
   deployed?: boolean;
   deployedUrl?: string;
   cloudflareAccountId?: string;
   extensions: unknown[];
+  models?: {
+    fast: string;
+    smart: string;
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -42,7 +47,6 @@ const c = {
   cyan: '\x1b[38;2;100;180;200m',
 };
 
-const write = (s: string) => process.stdout.write(s);
 const log = (s: string) => console.log(s);
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -50,7 +54,8 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 // ASCII Art
 // ═══════════════════════════════════════════════════════════════
 
-const LOGO = `${c.dim}┌───────────────────────────┐${c.reset}
+const LOGO = `
+${c.dim}┌───────────────────────────┐${c.reset}
 ${c.dim}│${c.reset} ${c.green}█▀▀ █▄█ █▀▀ ▀█▀ █▀▀ █▀▄▀█${c.reset} ${c.dim}│${c.reset}
 ${c.dim}│${c.reset} ${c.green}▀▀█  █  ▀▀█  █  ██▄ █ ▀ █${c.reset} ${c.dim}│${c.reset}
 ${c.dim}└───────────────────────────┘${c.reset}`;
@@ -64,7 +69,9 @@ const processes: ChildProcess[] = [];
 function cleanup() {
   log(`\n${c.dim}Shutting down...${c.reset}`);
   for (const proc of processes) {
-    proc.kill();
+    try {
+      proc.kill();
+    } catch {}
   }
   process.exit(0);
 }
@@ -93,27 +100,25 @@ async function startBridge(config: Config, host: string): Promise<void> {
     processes.push(proc);
     
     let started = false;
+    let output = '';
     
     proc.stdout.on('data', (data) => {
-      const str = data.toString();
-      if (str.includes('listening on') && !started) {
+      output += data.toString();
+      if ((output.includes('SYSTEM is online') || output.includes('listening')) && !started) {
         started = true;
         resolve();
       }
     });
     
     proc.stderr.on('data', (data) => {
-      if (!started) {
-        const str = data.toString();
-        if (str.includes('Error') || str.includes('error')) {
-          reject(new Error(str));
-        }
+      const str = data.toString();
+      if (!started && (str.includes('Error') || str.includes('EADDRINUSE'))) {
+        reject(new Error(str.trim()));
       }
     });
     
     proc.on('error', reject);
     
-    // Timeout
     setTimeout(() => {
       if (!started) resolve(); // Assume it started
     }, 5000);
@@ -149,10 +154,12 @@ async function startTunnel(): Promise<string> {
       checkUrl();
     });
     
-    proc.on('error', reject);
+    proc.on('error', (e) => {
+      if (!resolved) reject(e);
+    });
     
     setTimeout(() => {
-      if (!resolved) reject(new Error('Tunnel timeout'));
+      if (!resolved) reject(new Error('Tunnel timeout - is cloudflared installed?'));
     }, 30000);
   });
 }
@@ -161,24 +168,26 @@ async function updateDeployedBridgeUrl(bridgeUrl: string, accountId?: string): P
   const agentDir = join(process.cwd(), 'cloudflare-agent');
   try {
     const env = accountId ? { ...process.env, CLOUDFLARE_ACCOUNT_ID: accountId } : process.env;
-    execSync(`echo "${bridgeUrl}" | npx wrangler secret put BRIDGE_URL`, {
+    execSync(`echo "${bridgeUrl}" | npx wrangler secret put BRIDGE_URL 2>&1`, {
       cwd: agentDir,
       stdio: 'pipe',
       env,
+      timeout: 30000,
     });
-    log(`${c.dim}Updated BRIDGE_URL secret${c.reset}`);
-  } catch (e) {
-    log(`${c.yellow}Warning: Could not update BRIDGE_URL secret${c.reset}`);
+  } catch {
+    // Non-fatal
   }
 }
 
-async function startAgent(config: Config, bridgeUrl: string): Promise<void> {
+async function startLocalAgent(config: Config, bridgeUrl: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Write .dev.vars for local agent
+    const models = config.models || { fast: 'claude-3-5-haiku-20241022', smart: 'claude-sonnet-4-20250514' };
     const devVars = `ANTHROPIC_API_KEY=${config.anthropicKey}
 BRIDGE_URL=${bridgeUrl}
 BRIDGE_AUTH_TOKEN=${config.authToken}
 API_SECRET=${config.authToken.slice(0, 32)}
+MODEL_FAST=${models.fast}
+MODEL_SMART=${models.smart}
 `;
     
     const agentDir = join(process.cwd(), 'cloudflare-agent');
@@ -193,28 +202,30 @@ API_SECRET=${config.authToken.slice(0, 32)}
     processes.push(proc);
     
     let started = false;
+    let output = '';
     
-    proc.stdout.on('data', (data) => {
-      const str = data.toString();
-      if ((str.includes('Ready') || str.includes('localhost:8787')) && !started) {
+    const checkStarted = () => {
+      if ((output.includes('Ready') || output.includes('localhost:8787')) && !started) {
         started = true;
         resolve();
       }
+    };
+    
+    proc.stdout.on('data', (data) => {
+      output += data.toString();
+      checkStarted();
     });
     
     proc.stderr.on('data', (data) => {
-      const str = data.toString();
-      if ((str.includes('Ready') || str.includes('localhost:8787')) && !started) {
-        started = true;
-        resolve();
-      }
+      output += data.toString();
+      checkStarted();
     });
     
     proc.on('error', reject);
     
     setTimeout(() => {
-      if (!started) resolve();
-    }, 10000);
+      if (!started) resolve(); // Assume it started
+    }, 15000);
   });
 }
 
@@ -222,7 +233,14 @@ API_SECRET=${config.authToken.slice(0, 32)}
 // Status Display
 // ═══════════════════════════════════════════════════════════════
 
-function showStatus(services: { name: string; status: string; url?: string }[]) {
+interface Service {
+  name: string;
+  status: 'starting' | 'running' | 'error';
+  url?: string;
+  error?: string;
+}
+
+function showStatus(services: Service[], config: Config) {
   console.clear();
   log(LOGO);
   log('');
@@ -230,12 +248,12 @@ function showStatus(services: { name: string; status: string; url?: string }[]) 
   const maxName = Math.max(...services.map(s => s.name.length));
   
   for (const svc of services) {
-    const name = svc.name.padEnd(maxName);
+    const name = svc.name.padEnd(maxName + 2);
     let status = '';
     
     switch (svc.status) {
       case 'starting':
-        status = `${c.yellow}⠋ starting${c.reset}`;
+        status = `${c.yellow}◐ starting${c.reset}`;
         break;
       case 'running':
         status = `${c.green}● running${c.reset}`;
@@ -246,9 +264,13 @@ function showStatus(services: { name: string; status: string; url?: string }[]) 
     }
     
     if (svc.url) {
-      log(`  ${c.white}${name}${c.reset}  ${status}  ${c.cyan}${svc.url}${c.reset}`);
+      log(`  ${c.white}${name}${c.reset} ${status}  ${c.cyan}${svc.url}${c.reset}`);
     } else {
-      log(`  ${c.white}${name}${c.reset}  ${status}`);
+      log(`  ${c.white}${name}${c.reset} ${status}`);
+    }
+    
+    if (svc.error) {
+      log(`  ${' '.repeat(maxName + 2)} ${c.red}${svc.error}${c.reset}`);
     }
   }
   
@@ -270,25 +292,19 @@ function checkFullDiskAccess(): boolean {
 }
 
 function showPermissionWarning() {
-  log('');
   log(`${c.yellow}┌─────────────────────────────────────────────────────────┐${c.reset}`);
   log(`${c.yellow}│${c.reset} ${c.yellow}⚠${c.reset}  ${c.white}Full Disk Access not granted${c.reset}                         ${c.yellow}│${c.reset}`);
   log(`${c.yellow}│${c.reset}                                                         ${c.yellow}│${c.reset}`);
-  log(`${c.yellow}│${c.reset}    iMessage reading will not work until you:            ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}  iMessage reading won't work until you:                 ${c.yellow}│${c.reset}`);
   log(`${c.yellow}│${c.reset}                                                         ${c.yellow}│${c.reset}`);
-  log(`${c.yellow}│${c.reset}    1. Open System Settings → Privacy & Security         ${c.yellow}│${c.reset}`);
-  log(`${c.yellow}│${c.reset}    2. Click "Full Disk Access"                          ${c.yellow}│${c.reset}`);
-  log(`${c.yellow}│${c.reset}    3. Add Terminal (or your terminal app)               ${c.yellow}│${c.reset}`);
-  log(`${c.yellow}│${c.reset}    4. Restart this terminal and run npm start again     ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}  1. Open ${c.cyan}System Settings → Privacy & Security${c.reset}          ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}  2. Click ${c.cyan}Full Disk Access${c.reset}                             ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}  3. Add your terminal app and enable it                 ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}  4. Restart this terminal                               ${c.yellow}│${c.reset}`);
   log(`${c.yellow}│${c.reset}                                                         ${c.yellow}│${c.reset}`);
+  log(`${c.yellow}│${c.reset}  Run ${c.cyan}npm run check${c.reset} for detailed permission status      ${c.yellow}│${c.reset}`);
   log(`${c.yellow}└─────────────────────────────────────────────────────────┘${c.reset}`);
   log('');
-  
-  // Offer to open System Settings
-  log(`${c.dim}Opening System Settings...${c.reset}`);
-  try {
-    execSync('open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"', { stdio: 'ignore' });
-  } catch {}
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -300,134 +316,132 @@ async function main() {
   const configPath = join(process.cwd(), 'bridge.config.json');
   
   if (!existsSync(configPath)) {
-    log(`${c.red}Error: bridge.config.json not found${c.reset}`);
-    log(`${c.dim}Run: npm run setup${c.reset}`);
+    log(`\n${c.red}Error: Not configured${c.reset}`);
+    log(`\nRun ${c.cyan}npm run setup${c.reset} first.\n`);
     process.exit(1);
   }
   
   let config: Config;
   try {
     config = JSON.parse(readFileSync(configPath, 'utf-8'));
-  } catch (e) {
-    log(`${c.red}Error: Invalid bridge.config.json${c.reset}`);
+  } catch {
+    log(`\n${c.red}Error: Invalid config file${c.reset}`);
+    log(`\nRun ${c.cyan}npm run setup${c.reset} to reconfigure.\n`);
     process.exit(1);
   }
   
   // Validate config
-  if (!config.authToken) {
-    log(`${c.red}Error: No auth token in config${c.reset}`);
-    log(`${c.dim}Run: npm run setup${c.reset}`);
+  if (!config.authToken || !config.anthropicKey) {
+    log(`\n${c.red}Error: Missing required config values${c.reset}`);
+    log(`\nRun ${c.cyan}npm run setup${c.reset} to reconfigure.\n`);
     process.exit(1);
   }
   
-  if (!config.anthropicKey) {
-    log(`${c.red}Error: No Anthropic API key in config${c.reset}`);
-    log(`${c.dim}Run: npm run setup${c.reset}`);
-    process.exit(1);
-  }
+  // Determine what to start based on mode
+  const isRemote = config.mode === 'remote';
+  const isDeployed = isRemote && config.deployed && config.deployedUrl;
   
-  // Check permissions
-  if (!checkFullDiskAccess()) {
-    showPermissionWarning();
-    log(`${c.dim}Continuing anyway... (some features will be limited)${c.reset}`);
-    log('');
-    await sleep(3000);
-  }
-  
-  // Determine what to start
-  const needsTunnel = config.access === 'remote';
-  const needsLocalAgent = config.mode === 'ui' && !config.deployed;
-  const isDeployed = config.deployed && config.deployedUrl;
-  
-  const services: { name: string; status: string; url?: string }[] = [
+  // Build services list
+  const services: Service[] = [
     { name: 'Bridge', status: 'starting' },
   ];
   
-  if (needsTunnel) {
+  if (isRemote) {
     services.push({ name: 'Tunnel', status: 'starting' });
   }
   
-  if (needsLocalAgent) {
+  if (!isDeployed) {
     services.push({ name: 'Agent', status: 'starting' });
   }
   
-  if (isDeployed) {
-    services.push({ name: 'Deployed', status: 'running', url: config.deployedUrl });
+  showStatus(services, config);
+  
+  // Check permissions (warn but don't block)
+  if (!checkFullDiskAccess()) {
+    showPermissionWarning();
+    log(`${c.dim}Continuing anyway... some features may not work.${c.reset}`);
+    log('');
+    await sleep(2000);
   }
   
-  showStatus(services);
-  
   // Start bridge
+  const bridgeHost = isRemote ? '0.0.0.0' : '127.0.0.1';
+  
   try {
-    const bridgeHost = needsTunnel ? '0.0.0.0' : '127.0.0.1';
     await startBridge(config, bridgeHost);
     services[0].status = 'running';
     services[0].url = 'http://localhost:3000';
-    showStatus(services);
+    showStatus(services, config);
   } catch (e) {
     services[0].status = 'error';
-    showStatus(services);
-    log(`${c.red}Bridge error: ${e}${c.reset}`);
+    services[0].error = e instanceof Error ? e.message.slice(0, 50) : 'Failed to start';
+    showStatus(services, config);
+    
+    log(`\n${c.red}Bridge failed to start.${c.reset}`);
+    log(`${c.dim}Is port 3000 already in use?${c.reset}\n`);
     cleanup();
     return;
   }
   
-  // Start tunnel if needed
+  // Start tunnel if remote mode
   let bridgeUrl = 'http://localhost:3000';
   
-  if (needsTunnel) {
+  if (isRemote) {
+    const tunnelIdx = services.findIndex(s => s.name === 'Tunnel');
+    
     try {
       bridgeUrl = await startTunnel();
-      services[1].status = 'running';
-      services[1].url = bridgeUrl;
-      showStatus(services);
+      services[tunnelIdx].status = 'running';
+      services[tunnelIdx].url = bridgeUrl;
+      showStatus(services, config);
       
-      // If deployed, update the worker's BRIDGE_URL secret
+      // Update deployed worker with new tunnel URL
       if (isDeployed) {
-        log(`${c.dim}Updating deployed worker with tunnel URL...${c.reset}`);
         await updateDeployedBridgeUrl(bridgeUrl, config.cloudflareAccountId);
       }
     } catch (e) {
-      services[1].status = 'error';
-      showStatus(services);
-      log(`${c.yellow}Tunnel failed, using local mode${c.reset}`);
+      services[tunnelIdx].status = 'error';
+      services[tunnelIdx].error = e instanceof Error ? e.message.slice(0, 50) : 'Failed';
+      showStatus(services, config);
+      
+      log(`\n${c.yellow}Tunnel failed. Falling back to local mode.${c.reset}`);
+      log(`${c.dim}Install cloudflared: brew install cloudflared${c.reset}\n`);
+      
+      // Continue without tunnel - still useful for local access
       bridgeUrl = 'http://localhost:3000';
     }
   }
   
-  // Start local agent if needed (not deployed)
-  if (needsLocalAgent) {
+  // Start local agent if not deployed
+  if (!isDeployed) {
+    const agentIdx = services.findIndex(s => s.name === 'Agent');
+    
     try {
-      await startAgent(config, bridgeUrl);
-      const agentIdx = services.findIndex(s => s.name === 'Agent');
+      await startLocalAgent(config, bridgeUrl);
       services[agentIdx].status = 'running';
       services[agentIdx].url = 'http://localhost:8787';
-      showStatus(services);
+      showStatus(services, config);
     } catch (e) {
-      const agentIdx = services.findIndex(s => s.name === 'Agent');
       services[agentIdx].status = 'error';
-      showStatus(services);
-      log(`${c.red}Agent error: ${e}${c.reset}`);
+      services[agentIdx].error = e instanceof Error ? e.message.slice(0, 50) : 'Failed';
+      showStatus(services, config);
+      
+      log(`\n${c.red}Agent failed to start.${c.reset}`);
+      log(`${c.dim}Try: cd cloudflare-agent && npm install${c.reset}\n`);
     }
   }
   
-  // Final display
-  log('');
+  // Final summary
   log(`${c.dim}─────────────────────────────────────────────────────${c.reset}`);
   log('');
   
   if (isDeployed) {
-    log(`  ${c.green}${c.bold}Open SYSTEM:${c.reset} ${c.cyan}${config.deployedUrl}${c.reset}`);
-    log('');
-    log(`  ${c.dim}API Secret:${c.reset} ${c.white}${config.authToken.slice(0, 32)}${c.reset}`);
-  } else if (needsLocalAgent) {
-    log(`  ${c.green}${c.bold}Open SYSTEM:${c.reset} ${c.cyan}http://localhost:8787${c.reset}`);
-    log('');
-    log(`  ${c.dim}API Secret:${c.reset} ${c.white}${config.authToken.slice(0, 32)}${c.reset}`);
+    log(`  ${c.green}${c.bold}Open SYSTEM:${c.reset}  ${c.cyan}${config.deployedUrl}${c.reset}`);
+    log(`  ${c.dim}API Secret:${c.reset}   ${c.white}${config.authToken.slice(0, 32)}${c.reset}`);
   } else {
-    log(`  ${c.green}${c.bold}Bridge API:${c.reset} ${c.cyan}${bridgeUrl}${c.reset}`);
-    log('');
-    log(`  ${c.dim}Auth Token:${c.reset} ${c.white}${config.authToken.slice(0, 16)}...${c.reset}`);
+    const agentUrl = services.find(s => s.name === 'Agent')?.url || 'http://localhost:8787';
+    log(`  ${c.green}${c.bold}Open SYSTEM:${c.reset}  ${c.cyan}${agentUrl}${c.reset}`);
+    log(`  ${c.dim}API Secret:${c.reset}   ${c.white}${config.authToken.slice(0, 32)}${c.reset}`);
   }
   
   log('');
@@ -440,7 +454,6 @@ async function main() {
 }
 
 main().catch(e => {
-  console.error(`${c.red}Error: ${e.message}${c.reset}`);
+  console.error(`\n${c.red}Error: ${e.message}${c.reset}\n`);
   cleanup();
 });
-
