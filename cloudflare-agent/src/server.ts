@@ -1,5 +1,18 @@
-import { Agent, routeAgentRequest, getAgentByName, type Schedule, type Connection, type ConnectionContext } from "agents";
+import {
+  Agent,
+  routeAgentRequest,
+  getAgentByName,
+  type Schedule,
+  type Connection,
+  type ConnectionContext,
+} from "agents";
 import { chatHTML } from "./ui";
+import {
+  createProvider,
+  type AIProvider,
+  type Message,
+  type ProviderEnv,
+} from "./providers";
 
 /**
  * SYSTEM Agent - Remote Mac Control via AI
@@ -12,24 +25,11 @@ import { chatHTML } from "./ui";
 // Types
 // ═══════════════════════════════════════════════════════════════
 
-export interface Env {
-  ANTHROPIC_API_KEY: string;
+export interface Env extends ProviderEnv {
   BRIDGE_URL: string;
   BRIDGE_AUTH_TOKEN: string;
   API_SECRET: string;
   SystemAgent: DurableObjectNamespace<SystemAgent>;
-  // Model configuration (optional - defaults provided)
-  MODEL_FAST?: string;  // For quick tasks like intent classification
-  MODEL_SMART?: string; // For complex reasoning and vision
-}
-
-type MessageContent = 
-  | { type: "text"; text: string }
-  | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
-
-interface Message {
-  role: "user" | "assistant";
-  content: string | MessageContent[];
 }
 
 interface Tool {
@@ -137,6 +137,14 @@ export class SystemAgent extends Agent<Env, SystemState> {
   private readonly RATE_LIMIT = 60;
   private readonly RATE_WINDOW = 60 * 1000;
   private connections: Map<string, Connection> = new Map();
+  private provider?: AIProvider;
+
+  private getProvider(): AIProvider {
+    if (!this.provider) {
+      this.provider = createProvider(this.env);
+    }
+    return this.provider;
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // Conversation Management
@@ -617,6 +625,7 @@ export class SystemAgent extends Agent<Env, SystemState> {
     // Get active conversation (creates new one if needed)
     const conversation = this.getActiveConversation();
     const conversationId = conversation.id;
+    const provider = this.getProvider();
     
     // Handle pending actions (human-in-the-loop)
     if (conversation.pendingAction) {
@@ -666,7 +675,11 @@ export class SystemAgent extends Agent<Env, SystemState> {
     const tools = await this.fetchTools();
     const messages: Message[] = [...conversation.history.slice(-40), { role: "user" as const, content: message }];
     const systemPrompt = this.buildSystemPrompt(tools, intent);
-    const response = await this.callClaude(systemPrompt, messages);
+    const response = await provider.chat({
+      system: systemPrompt,
+      messages,
+      model: this.env.MODEL_SMART,
+    });
     const { text, actions, schedule } = this.parseResponse(response);
     
     const actionResults: Array<{ tool: string; args: Record<string, unknown>; result: string; success: boolean; image?: { data: string; mimeType: string } }> = [];
@@ -692,8 +705,8 @@ export class SystemAgent extends Agent<Env, SystemState> {
       // Screenshot taken - send image to Claude for analysis
       if (action.tool === 'screenshot' && result.success && result.image) {
         // Ask Claude to analyze the screenshot
-        const analysis = await this.callClaudeWithVision(
-          `You are SYSTEM, an AI assistant that controls a Mac remotely. You CAN send iMessages, control apps, take screenshots, etc.
+        const analysis = await provider.chatWithVision({
+          system: `You are SYSTEM, an AI assistant that controls a Mac remotely. You CAN send iMessages, control apps, take screenshots, etc.
 
 You just took a screenshot. Your ONLY job right now is to describe what you see in the image accurately and concisely.
 
@@ -703,9 +716,10 @@ DO NOT:
 - Add caveats about AI limitations
 
 JUST describe what's visible in the screenshot. Keep it brief.`,
-          message,
-          result.image
-        );
+          userRequest: message,
+          image: result.image,
+          model: this.env.MODEL_SMART,
+        });
         
         // Store the screenshot and update conversation history
         const newHistory = [
@@ -752,7 +766,11 @@ JUST describe what's visible in the screenshot. Keep it brief.`,
           }
           
           if (/make\s*up|create|write|generate/i.test(message)) {
-            const generated = await this.callClaude("Write a short, friendly message. Just the text, nothing else.", [{ role: "user", content: `Write: "${message}"` }]);
+            const generated = await provider.chat({
+              system: "Write a short, friendly message. Just the text, nothing else.",
+              messages: [{ role: "user", content: `Write: "${message}"` }],
+              model: this.env.MODEL_FAST || this.env.MODEL_SMART,
+            });
             const newPending: PendingAction = { tool: 'send_imessage', args: { to: phone, message: generated.trim() }, context: result.result, originalRequest: message };
             this.updateConversationHistory(conversationId, conversation.history, newPending);
             return { message: `Found: **${result.result}**\n\n> "${generated.trim()}"\n\nSend? *(yes/no)*`, actions: actionResults, conversationId };
@@ -1141,96 +1159,18 @@ User request: "${message.replace(/"/g, '\\"')}"
 Category:`;
 
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": this.env.ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({ 
-          model: this.env.MODEL_FAST || "claude-3-5-haiku-20241022", 
-          max_tokens: 20, 
-          messages: [{ role: "user", content: classifierPrompt }] 
-        }),
+      const provider = this.getProvider();
+      const response = await provider.chat({
+        system: "",
+        messages: [{ role: "user", content: classifierPrompt }],
+        model: this.env.MODEL_FAST,
       });
-
-      if (!response.ok) return "raycast"; // Default fallback
-      const data = await response.json() as { content: { text: string }[] };
-      return data.content[0]?.text?.trim().toLowerCase().replace(/[^a-z_]/g, '') || "raycast";
+      return response.trim().toLowerCase().replace(/[^a-z_]/g, "") || "raycast";
     } catch {
       return "raycast"; // Default fallback on error
     }
   }
 
-  async callClaude(systemPrompt: string, messages: Message[]): Promise<string> {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": this.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({ model: this.env.MODEL_SMART || "claude-sonnet-4-20250514", max_tokens: 4096, system: systemPrompt, messages }),
-    });
-
-    if (!response.ok) throw new Error(`Claude API error: ${response.status}`);
-    const data = await response.json() as { content: { text: string }[] };
-    return data.content[0]?.text || "No response";
-  }
-
-  async callClaudeWithVision(
-    systemPrompt: string, 
-    userRequest: string,
-    image: { data: string; mimeType: string }
-  ): Promise<string> {
-    // Create a simple message with the user's request and the screenshot image
-    // The image is attached to a new user message asking Claude to analyze it
-    const visionMessages = [
-      {
-        role: "user",
-        content: [
-          { 
-            type: "image", 
-            source: { 
-              type: "base64", 
-              media_type: image.mimeType, 
-              data: image.data 
-            } 
-          },
-          { 
-            type: "text", 
-            text: userRequest 
-              ? `The user asked: "${userRequest}"\n\nHere is the screenshot I just took. Please describe what you see and address the user's request.`
-              : "Here is a screenshot I just took. Please describe what you see."
-          }
-        ]
-      }
-    ];
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": this.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({ 
-        model: this.env.MODEL_SMART || "claude-sonnet-4-20250514", 
-        max_tokens: 4096, 
-        system: systemPrompt, 
-        messages: visionMessages 
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Claude Vision API error: ${response.status}`, errorText);
-      throw new Error(`Claude Vision API error: ${response.status} - ${errorText}`);
-    }
-    const data = await response.json() as { content: { text: string }[] };
-    return data.content[0]?.text || "No response";
-  }
 
   async fetchTools(): Promise<Tool[]> {
     try {

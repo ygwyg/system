@@ -33,9 +33,18 @@ interface Extension {
   }>;
 }
 
+interface ProviderConfig {
+  env?: Record<string, string>;
+  models?: {
+    fast?: string;
+    smart?: string;
+  };
+}
+
 interface Config {
   authToken: string;
-  anthropicKey: string;
+  aiProvider?: string;
+  providerEnvs?: Record<string, ProviderConfig>;
   mode: 'local' | 'remote';
   extensions: Extension[];
   deployed?: boolean;
@@ -53,6 +62,22 @@ interface Config {
 
 const write = (s: string) => process.stdout.write(s);
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const DEFAULT_MODELS = {
+  fast: 'claude-3-5-haiku-20241022',
+  smart: 'claude-sonnet-4-20250514',
+};
+
+function parseEnvPairs(input: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const segment of input.split(',')) {
+    const trimmed = segment.trim();
+    if (!trimmed) continue;
+    const [key, ...rest] = trimmed.split('=');
+    if (!key || rest.length === 0) continue;
+    env[key.trim()] = rest.join('=').trim();
+  }
+  return env;
+}
 
 let rows = process.stdout.rows || 24;
 let cols = process.stdout.columns || 80;
@@ -467,6 +492,30 @@ interface CloudflareAccount {
   id: string;
 }
 
+function resolveProviderConfig(config: Config): { name: string; env: Record<string, string>; models: { fast: string; smart: string } } {
+  const providerName = config.aiProvider || Object.keys(config.providerEnvs || {})[0];
+  if (!providerName) {
+    throw new Error('No AI provider configured');
+  }
+
+  const provider = config.providerEnvs?.[providerName] || {};
+  const env = provider.env || {};
+  const models = {
+    fast: provider.models?.fast || config.models?.fast || DEFAULT_MODELS.fast,
+    smart: provider.models?.smart || config.models?.smart || DEFAULT_MODELS.smart,
+  };
+
+  if (!config.authToken) {
+    throw new Error('Missing authToken');
+  }
+
+  if (Object.keys(env).length === 0) {
+    throw new Error(`Provider "${providerName}" has no env configured`);
+  }
+
+  return { name: providerName, env, models };
+}
+
 function detectCloudflareAccounts(): CloudflareAccount[] {
   try {
     const output = execSync('npx wrangler whoami 2>&1', { 
@@ -518,14 +567,15 @@ async function deployToCloudflare(config: Config, accountId: string): Promise<{ 
     }
     
     // Step 2: Set secrets
-    const models = config.models || { fast: 'claude-3-5-haiku-20241022', smart: 'claude-sonnet-4-20250514' };
+    const provider = resolveProviderConfig(config);
     const secrets = [
-      { name: 'ANTHROPIC_API_KEY', value: config.anthropicKey },
       { name: 'BRIDGE_AUTH_TOKEN', value: config.authToken },
       { name: 'API_SECRET', value: config.authToken.slice(0, 32) },
       { name: 'BRIDGE_URL', value: 'http://localhost:3000' }, // Will be updated when tunnel starts
-      { name: 'MODEL_FAST', value: models.fast },
-      { name: 'MODEL_SMART', value: models.smart },
+      { name: 'AI_PROVIDER', value: provider.name },
+      { name: 'MODEL_FAST', value: provider.models.fast },
+      { name: 'MODEL_SMART', value: provider.models.smart },
+      ...Object.entries(provider.env).map(([name, value]) => ({ name, value })),
     ];
     
     for (const secret of secrets) {
@@ -745,6 +795,43 @@ async function showPermissionsStep(): Promise<void> {
   }
 }
 
+async function configureProvider(existing: Config): Promise<{ name: string; provider: ProviderConfig }> {
+  const defaultName = existing.aiProvider || Object.keys(existing.providerEnvs || {})[0] || 'provider';
+  await clearContent();
+  await drawStep(3, 4, 'AI Provider');
+  const providerName = (await askInput('Provider name', defaultName, false, defaultName)).trim() || defaultName;
+
+  const current = (existing.providerEnvs || {})[providerName] || {};
+  const envPreset = Object.entries(current.env || {})
+    .map(([k, v]) => `${k}=${v}`)
+    .join(', ');
+
+  await clearContent();
+  await drawStep(3, 4, 'AI Provider');
+  await showMessage(10, `${c.dim}Enter env as comma-separated key=value pairs${c.reset}`, c.dim);
+  const envInput = await askInput('Env vars', envPreset || 'API_KEY=...', false, envPreset);
+  const env = parseEnvPairs(envInput);
+
+  const fastDefault = current.models?.fast || existing.models?.fast || DEFAULT_MODELS.fast;
+  const smartDefault = current.models?.smart || existing.models?.smart || DEFAULT_MODELS.smart;
+
+  await clearContent();
+  await drawStep(3, 4, 'AI Provider');
+  const fastModel = await askInput('Fast model (optional)', fastDefault, false, fastDefault);
+  const smartModel = await askInput('Smart model (optional)', smartDefault, false, smartDefault);
+
+  return {
+    name: providerName,
+    provider: {
+      env,
+      models: {
+        fast: fastModel || undefined,
+        smart: smartModel || undefined,
+      },
+    },
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Main Setup Flow
 // ═══════════════════════════════════════════════════════════════
@@ -767,15 +854,19 @@ async function main() {
     } catch {}
   }
   
+  const existingProviders = existingConfig.providerEnvs || {};
+  const defaultProvider = existingConfig.aiProvider || Object.keys(existingProviders)[0];
+
   const config: Config = {
     authToken: existingConfig.authToken || randomBytes(32).toString('hex'),
-    anthropicKey: existingConfig.anthropicKey || '',
+    aiProvider: defaultProvider,
+    providerEnvs: existingProviders,
     mode: existingConfig.mode || 'local',
     extensions: existingConfig.extensions || [],
-    models: existingConfig.models || {
-      fast: 'claude-3-5-haiku-20241022',
-      smart: 'claude-sonnet-4-20250514',
-    },
+    models: existingConfig.models || DEFAULT_MODELS,
+    deployed: existingConfig.deployed,
+    deployedUrl: existingConfig.deployedUrl,
+    cloudflareAccountId: existingConfig.cloudflareAccountId,
   };
   
   // ─── Step 1: Choose Mode ───
@@ -842,35 +933,30 @@ async function main() {
   await showMessage(14, `${c.green}✓${c.reset} Permissions configured`, c.white);
   await sleep(800);
   
-  // ─── Step 3: API Key ───
-  await clearContent();
-  await drawStep(3, 4, 'Anthropic API Key');
-  
-  if (config.anthropicKey) {
-    const keepKey = await askYesNo('Keep existing API key?', true);
-    if (!keepKey) {
+  // ─── Step 3: AI Provider ───
+  let providerSet = false;
+  while (!providerSet) {
+    const { name, provider } = await configureProvider(config);
+    if (!provider.env || Object.keys(provider.env).length === 0) {
       await clearContent();
-      await drawStep(3, 4, 'Anthropic API Key');
-      config.anthropicKey = await askInput('Anthropic API Key', 'sk-ant-...', true);
+      await drawStep(3, 4, 'AI Provider');
+      await showMessage(14, `${c.yellow}Provider env cannot be empty${c.reset}`, c.yellow);
+      await sleep(1000);
+      continue;
     }
-  } else {
-    config.anthropicKey = await askInput('Anthropic API Key', 'sk-ant-...', true);
+
+    config.aiProvider = name;
+    config.providerEnvs = { ...(config.providerEnvs || {}), [name]: provider };
+    config.models = {
+      fast: provider.models?.fast || config.models?.fast || DEFAULT_MODELS.fast,
+      smart: provider.models?.smart || config.models?.smart || DEFAULT_MODELS.smart,
+    };
+    providerSet = true;
   }
-  
-  // Validate key format
-  if (!config.anthropicKey.startsWith('sk-ant-')) {
-    await clearContent();
-    await drawStep(3, 4, 'Anthropic API Key');
-    await showMessage(14, `${c.yellow}Warning: Key doesn't start with sk-ant-${c.reset}`, c.yellow);
-    await sleep(1000);
-    await clearContent();
-    await drawStep(3, 4, 'Anthropic API Key');
-    config.anthropicKey = await askInput('Anthropic API Key', 'sk-ant-...', true);
-  }
-  
+
   await clearContent();
-  await drawStep(3, 4, 'Anthropic API Key');
-  await showMessage(14, `${c.green}✓${c.reset} API key configured`, c.white);
+  await drawStep(3, 4, 'AI Provider');
+  await showMessage(14, `${c.green}✓${c.reset} Provider configured`, c.white);
   await sleep(800);
   
   // ─── Step 4: Deploy / Finalize ───

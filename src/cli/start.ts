@@ -17,15 +17,33 @@ import { homedir } from 'os';
 // Types
 // ═══════════════════════════════════════════════════════════════
 
+interface ProviderConfig {
+  env?: Record<string, string>;
+  models?: {
+    fast?: string;
+    smart?: string;
+  };
+}
+
 interface Config {
   authToken: string;
-  anthropicKey: string;
+  aiProvider?: string;
+  providerEnvs?: Record<string, ProviderConfig>;
   mode: 'local' | 'remote';
   deployed?: boolean;
   deployedUrl?: string;
   cloudflareAccountId?: string;
   extensions: unknown[];
   models?: {
+    fast: string;
+    smart: string;
+  };
+}
+
+interface ResolvedProvider {
+  name: string;
+  env: Record<string, string>;
+  models: {
     fast: string;
     smart: string;
   };
@@ -49,6 +67,36 @@ const c = {
 
 const log = (s: string) => console.log(s);
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+const DEFAULT_MODELS = {
+  fast: 'claude-3-5-haiku-20241022',
+  smart: 'claude-sonnet-4-20250514',
+};
+
+function resolveProvider(config: Config): ResolvedProvider {
+  const providerName =
+    config.aiProvider || Object.keys(config.providerEnvs || {})[0];
+  if (!providerName) {
+    throw new Error('No AI provider configured');
+  }
+
+  const providerConfig = config.providerEnvs?.[providerName] || {};
+  const env = providerConfig.env || {};
+  const models = {
+    fast: providerConfig.models?.fast || config.models?.fast || DEFAULT_MODELS.fast,
+    smart: providerConfig.models?.smart || config.models?.smart || DEFAULT_MODELS.smart,
+  };
+
+  if (!config.authToken) {
+    throw new Error('Missing authToken in config');
+  }
+
+  if (Object.keys(env).length === 0) {
+    throw new Error(`Provider "${providerName}" has no credentials/env set`);
+  }
+
+  return { name: providerName, env, models };
+}
 
 // ═══════════════════════════════════════════════════════════════
 // ASCII Art
@@ -181,14 +229,17 @@ async function updateDeployedBridgeUrl(bridgeUrl: string, accountId?: string): P
 
 async function startLocalAgent(config: Config, bridgeUrl: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const models = config.models || { fast: 'claude-3-5-haiku-20241022', smart: 'claude-sonnet-4-20250514' };
-    const devVars = `ANTHROPIC_API_KEY=${config.anthropicKey}
-BRIDGE_URL=${bridgeUrl}
-BRIDGE_AUTH_TOKEN=${config.authToken}
-API_SECRET=${config.authToken.slice(0, 32)}
-MODEL_FAST=${models.fast}
-MODEL_SMART=${models.smart}
-`;
+    const provider = resolveProvider(config);
+    const devVarsLines = [
+      `BRIDGE_URL=${bridgeUrl}`,
+      `BRIDGE_AUTH_TOKEN=${config.authToken}`,
+      `API_SECRET=${config.authToken.slice(0, 32)}`,
+      `AI_PROVIDER=${provider.name}`,
+      `MODEL_FAST=${provider.models.fast}`,
+      `MODEL_SMART=${provider.models.smart}`,
+      ...Object.entries(provider.env).map(([key, value]) => `${key}=${value}`),
+    ];
+    const devVars = devVarsLines.join('\n') + '\n';
     
     const agentDir = join(process.cwd(), 'cloudflare-agent');
     writeFileSync(join(agentDir, '.dev.vars'), devVars);
@@ -331,9 +382,13 @@ async function main() {
   }
   
   // Validate config
-  if (!config.authToken || !config.anthropicKey) {
+  try {
+    resolveProvider(config);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Missing required config values';
     log(`\n${c.red}Error: Missing required config values${c.reset}`);
-    log(`\nRun ${c.cyan}npm run setup${c.reset} to reconfigure.\n`);
+    log(`\n${message}\n`);
+    log(`Run ${c.cyan}npm run setup${c.reset} to reconfigure.\n`);
     process.exit(1);
   }
   
