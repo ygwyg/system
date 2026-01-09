@@ -25,8 +25,6 @@ interface AppPermission {
 const PERMISSIONS: Permission[] = [
   { id: 'accessibility', name: 'Accessibility', description: 'Control keyboard and mouse', granted: false },
   { id: 'screen_recording', name: 'Screen Recording', description: 'Take screenshots', granted: false },
-  { id: 'full_disk', name: 'Full Disk Access', description: 'Read iMessages and files', granted: false },
-  { id: 'contacts', name: 'Contacts', description: 'Look up contacts', granted: false },
   { id: 'automation', name: 'Automation', description: 'Control other apps', granted: false },
 ];
 
@@ -35,7 +33,6 @@ const APP_ICONS: Record<string, string> = {
   'Calendar': '📅',
   'Contacts': '👤',
   'Finder': '📁',
-  'Messages': '💬',
   'Music': '🎵',
   'Notes': '📝',
   'Reminders': '☑️',

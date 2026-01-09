@@ -30,7 +30,6 @@ export { finderTools } from './finder.js';
 export { shortcutsTools } from './shortcuts.js';
 export { browserTools } from './browser.js';
 export { systemTools } from './system.js';
-export { messagingTools } from './messaging.js';
 export { screenshotTools } from './screenshot.js';
 export { inputTools } from './input.js';
 
@@ -50,7 +49,6 @@ import { finderTools } from './finder.js';
 import { shortcutsTools } from './shortcuts.js';
 import { browserTools } from './browser.js';
 import { systemTools } from './system.js';
-import { messagingTools } from './messaging.js';
 import { screenshotTools } from './screenshot.js';
 import { inputTools } from './input.js';
 
@@ -64,7 +62,6 @@ export const allTools = [
   ...musicTools, // music_play, pause, next, previous, current
   ...volumeTools, // volume_set, get, up, down, mute
   ...systemTools, // notify, say, wait, clipboard_get, clipboard_set
-  ...messagingTools, // read_imessages, send_imessage, search_contacts
   ...screenshotTools, // screenshot, get_screen_size
   ...inputTools, // mouse_click, mouse_move, keyboard_type, keyboard_key, mouse_drag, scroll
   ...calendarTools, // calendar_today, upcoming, create, next

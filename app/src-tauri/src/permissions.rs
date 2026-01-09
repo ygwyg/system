@@ -5,11 +5,11 @@ use std::process::Command;
 pub fn check_all() -> HashMap<String, bool> {
     let mut results = HashMap::new();
     
-    results.insert("full_disk".to_string(), check_full_disk_access());
+    // Note: Full Disk Access removed - no longer needed without iMessage
     results.insert("accessibility".to_string(), check_accessibility());
     results.insert("screen_recording".to_string(), check_screen_recording());
-    results.insert("contacts".to_string(), check_contacts());
     results.insert("automation".to_string(), check_automation());
+    // Note: Contacts is handled via Automation permission (AppleScript prompt)
     
     results
 }
@@ -17,10 +17,8 @@ pub fn check_all() -> HashMap<String, bool> {
 /// Request a specific permission (opens System Settings)
 pub fn request(permission: &str) -> Result<(), Box<dyn std::error::Error>> {
     let url = match permission {
-        "full_disk" => "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
         "accessibility" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
         "screen_recording" => "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-        "contacts" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts",
         "automation" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
         _ => return Err("Unknown permission".into()),
     };
@@ -32,37 +30,10 @@ pub fn request(permission: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Check Full Disk Access by trying to read Messages database
-fn check_full_disk_access() -> bool {
-    let home = std::env::var("HOME").unwrap_or_default();
-    let db_path = format!("{}/Library/Messages/chat.db", home);
-    
-    let output = Command::new("sqlite3")
-        .args([&db_path, "SELECT 1 LIMIT 1"])
-        .output();
-    
-    match output {
-        Ok(o) => o.status.success(),
-        Err(_) => false,
-    }
-}
-
 /// Check Accessibility permission
 fn check_accessibility() -> bool {
     let output = Command::new("osascript")
         .args(["-e", "tell application \"System Events\" to return name of first process"])
-        .output();
-    
-    match output {
-        Ok(o) => o.status.success(),
-        Err(_) => false,
-    }
-}
-
-/// Check Contacts access
-fn check_contacts() -> bool {
-    let output = Command::new("osascript")
-        .args(["-e", "tell application \"Contacts\" to return count of people"])
         .output();
     
     match output {
@@ -85,17 +56,14 @@ fn check_automation() -> bool {
 
 /// Check Screen Recording permission
 fn check_screen_recording() -> bool {
-    // Use CGPreflightScreenCaptureAccess via a simple swift snippet
-    // This returns the actual permission state without triggering a prompt
-    let output = Command::new("swift")
-        .args(["-e", "import ScreenCaptureKit; print(CGPreflightScreenCaptureAccess())"])
+    // Try to take a screenshot - this is the most reliable way to check
+    // If screen recording is not granted, screencapture will fail or produce empty output
+    let output = Command::new("screencapture")
+        .args(["-x", "-c"]) // -x no sound, -c to clipboard (no file)
         .output();
     
     match output {
-        Ok(o) => {
-            let stdout = String::from_utf8_lossy(&o.stdout);
-            stdout.trim() == "true"
-        }
+        Ok(o) => o.status.success(),
         Err(_) => false,
     }
 }
@@ -107,12 +75,10 @@ pub const AUTOMATION_APPS: &[(&str, &str)] = &[
     ("Calendar", "tell application \"Calendar\" to get name"),
     ("Contacts", "tell application \"Contacts\" to get name"),
     ("Finder", "tell application \"Finder\" to get name"),
-    ("Messages", "tell application \"Messages\" to get name"),
     ("Music", "tell application \"Music\" to get name"),
     ("Notes", "tell application \"Notes\" to get name"),
     ("Reminders", "tell application \"Reminders\" to get name"),
     ("Safari", "tell application \"Safari\" to get name"),
-    ("Google Chrome", "tell application \"Google Chrome\" to get name"),
     ("System Events", "tell application \"System Events\" to get name"),
 ];
 

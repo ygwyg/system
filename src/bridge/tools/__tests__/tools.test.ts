@@ -83,13 +83,6 @@ describe('allTools registry', () => {
       expect(screenshotTools.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should have messaging tools', () => {
-      const msgTools = allTools.filter(
-        (t) => t.name.includes('imessage') || t.name.includes('message')
-      );
-      expect(msgTools.length).toBeGreaterThanOrEqual(1);
-    });
-
     it('should have calendar tools', () => {
       const calTools = allTools.filter((t) => t.name.startsWith('calendar_'));
       expect(calTools.length).toBeGreaterThanOrEqual(1);

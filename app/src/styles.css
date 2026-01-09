@@ -411,12 +411,12 @@ body {
   text-align: center;
 }
 
-/* App permissions grid */
+/* App permissions grid - 2 rows of 4 */
 .app-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
-  padding: 10px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 12px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: 8px;

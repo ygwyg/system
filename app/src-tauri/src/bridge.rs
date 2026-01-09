@@ -80,21 +80,11 @@ pub fn find_project_root(config: Option<&Config>) -> Result<PathBuf, Box<dyn std
 }
 
 pub async fn start_local_server(api_secret: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Check if already running
-    {
-        let mut guard = LOCAL_SERVER_PROCESS.lock().unwrap();
-        if let Some(ref mut child) = *guard {
-            if child.try_wait()?.is_none() {
-                return Ok(());
-            }
-        }
-    }
-    
     let config = crate::config::load_config().ok();
     let project_root = find_project_root(config.as_ref())?;
     let agent_dir = project_root.join("cloudflare-agent");
     
-    // Write .dev.vars with API key and the generated API secret
+    // Always write .dev.vars with API key and the generated API secret
     if let Some(cfg) = &config {
         if let Some(ref api_key) = cfg.anthropic_key {
             // Use the provided api_secret for both bridge auth and API secret
@@ -115,6 +105,36 @@ pub async fn start_local_server(api_secret: &str) -> Result<(), Box<dyn std::err
         }
     }
     
+    // Kill ANY process on ports 3000 and 8787 (in case of orphaned processes from crashed app)
+    let _ = Command::new("sh")
+        .args(["-c", "lsof -ti:3000 | xargs kill -9 2>/dev/null; lsof -ti:8787 | xargs kill -9 2>/dev/null"])
+        .output();
+    
+    // Also kill by process name for good measure
+    let _ = Command::new("pkill").args(["-9", "-f", "wrangler dev"]).output();
+    let _ = Command::new("pkill").args(["-9", "-f", "http-server.js"]).output();
+    
+    // Small delay to let ports free up
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    
+    // Clear our tracked processes too
+    {
+        let mut guard = LOCAL_SERVER_PROCESS.lock().unwrap();
+        if let Some(ref mut child) = *guard {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        *guard = None;
+    }
+    {
+        let mut guard = BRIDGE_PROCESS.lock().unwrap();
+        if let Some(ref mut child) = *guard {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        *guard = None;
+    }
+    
     // Start wrangler dev
     let child = create_command("npx")
         .args(["wrangler", "dev", "--port", "8787"])
@@ -125,8 +145,8 @@ pub async fn start_local_server(api_secret: &str) -> Result<(), Box<dyn std::err
     
     *LOCAL_SERVER_PROCESS.lock().unwrap() = Some(child);
     
-    // Start bridge too
-    start_bridge().await?;
+    // Start bridge
+    start_bridge(&project_root).await?;
     
     // Wait for server to be ready
     tokio::time::sleep(tokio::time::Duration::from_secs(4)).await;
@@ -134,22 +154,10 @@ pub async fn start_local_server(api_secret: &str) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
-async fn start_bridge() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    {
-        let mut guard = BRIDGE_PROCESS.lock().unwrap();
-        if let Some(ref mut child) = *guard {
-            if child.try_wait()?.is_none() {
-                return Ok(());
-            }
-        }
-    }
-    
-    let config = crate::config::load_config().ok();
-    let project_root = find_project_root(config.as_ref())?;
-    
+async fn start_bridge(project_root: &PathBuf) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let child = create_command("node")
         .arg("dist/bridge/http-server.js")
-        .current_dir(&project_root)
+        .current_dir(project_root)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()?;
