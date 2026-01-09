@@ -170,13 +170,6 @@ GET /health
 | `volume_down` | Volume -10% | — |
 | `volume_mute` | Toggle mute | — |
 
-### Messaging
-
-| Tool | Description | Args |
-|------|-------------|------|
-| `search_contacts` | Find contact | `query`, `message?` |
-| `send_imessage` | Send iMessage | `recipient`, `message` |
-
 ### Calendar & Reminders
 
 | Tool | Description | Args |
@@ -283,5 +276,4 @@ No built-in rate limiting. The bridge processes requests sequentially.
 - Bearer token authentication
 - Shell command allowlisting
 - Dangerous pattern blocking
-- Human-in-the-loop for messaging
 - Ephemeral tunnel URLs

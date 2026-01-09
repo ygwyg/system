@@ -88,10 +88,6 @@ Events: `scheduled_result`, `notification`, `bridge_status`
 - `music_play/pause/next/previous/current`
 - `volume_get/set/up/down/mute`
 
-## Messaging
-- `search_contacts` - Find contact by name
-- `send_imessage` - Send iMessage (requires confirmation)
-
 ## Calendar & Reminders
 - `calendar_today/upcoming/next/create`
 - `reminders_list/create/complete`
@@ -142,7 +138,6 @@ User → Agent (Cloudflare) → Bridge (Mac) → Tool → Response
 - Bearer token authentication
 - Shell command allowlisting
 - Dangerous pattern blocking
-- Human-in-the-loop for messaging
 - Ephemeral tunnel URLs
 
 ## Cloudflare Access (Recommended)

@@ -419,6 +419,7 @@
         <div class="nav-title">getting started</div>
         <a href="#intro" class="nav-link">introduction</a>
         <a href="#quickstart" class="nav-link">quick start</a>
+        <a href="#permissions" class="nav-link">permissions</a>
         <a href="#architecture" class="nav-link">architecture</a>
       </div>
       <div class="nav-section">
@@ -432,7 +433,6 @@
         <div class="nav-title">tools</div>
         <a href="#core-tools" class="nav-link">core</a>
         <a href="#music-tools" class="nav-link">music</a>
-        <a href="#messaging-tools" class="nav-link">messaging</a>
         <a href="#system-tools" class="nav-link">system</a>
         <a href="#notes-tools" class="nav-link">notes</a>
         <a href="#files-tools" class="nav-link">files</a>
@@ -471,17 +471,42 @@
       <section id="quickstart">
         <h2>quick start</h2>
         
-        <h3>1. clone and install</h3>
+        <h3>desktop app (recommended)</h3>
+        <p>The easiest way to get started. Download, install, and the app guides you through everything.</p>
+        <ol>
+          <li>Download <a href="https://github.com/ygwyg/system/releases/latest">SYSTEM.dmg</a> from releases</li>
+          <li>Drag to Applications</li>
+          <li>Launch and follow the onboarding wizard</li>
+        </ol>
+        <p>The app lives in your menu bar and handles permissions, configuration, and auto-starts everything.</p>
+
+        <h3>cli (advanced)</h3>
         <pre><code>git clone https://github.com/ygwyg/system
-cd system && npm install</code></pre>
+cd system && npm install
+npm run setup  <span class="hl-comment"># interactive wizard</span>
+npm start      <span class="hl-comment"># start everything</span></code></pre>
+      </section>
 
-        <h3>2. run setup wizard</h3>
-        <pre><code>npm run setup</code></pre>
-        <p>Interactive setup: Anthropic API key, Raycast extensions, remote access.</p>
+      <!-- Permissions -->
+      <section id="permissions">
+        <h2>permissions</h2>
+        <p>SYSTEM requires 3 macOS permissions to control your Mac. The desktop app guides you through granting these.</p>
 
-        <h3>3. start system</h3>
-        <pre><code>npm start</code></pre>
-        <p>Starts bridge, tunnel, and opens the agent UI.</p>
+        <table>
+          <thead>
+            <tr><th>permission</th><th>why it's needed</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Accessibility</td><td>Keyboard input, mouse control, window management</td></tr>
+            <tr><td>Screen Recording</td><td>Screenshots for visual context</td></tr>
+            <tr><td>Automation</td><td>Control apps: Finder, Safari, Notes, Calendar, Reminders, Music, Mail, System Events</td></tr>
+          </tbody>
+        </table>
+
+        <div class="info">
+          <div class="info-title">granting permissions</div>
+          <p>System Settings → Privacy & Security → [Permission] → Enable SYSTEM. The desktop app will prompt you and open the right settings pane automatically.</p>
+        </div>
       </section>
 
       <!-- Architecture -->
@@ -706,27 +731,6 @@ Authorization: Bearer &lt;api_secret&gt;
             <tr><td><code>volume_mute</code></td><td>Toggle mute</td></tr>
           </tbody>
         </table>
-      </section>
-
-      <!-- Messaging Tools -->
-      <section id="messaging-tools">
-        <h2>messaging</h2>
-        <p>Send iMessages with human-in-the-loop confirmation.</p>
-
-        <table>
-          <thead>
-            <tr><th>tool</th><th>description</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><code>search_contacts</code></td><td>Find contact by name</td></tr>
-            <tr><td><code>send_imessage</code></td><td>Send iMessage</td></tr>
-          </tbody>
-        </table>
-
-        <div class="info">
-          <div class="info-title">safety flow</div>
-          <p>When you say "text my wife hello", SYSTEM will: 1) resolve "wife" from preferences, 2) search contacts, 3) ask for confirmation before sending.</p>
-        </div>
       </section>
 
       <!-- System Tools -->
@@ -1050,8 +1054,8 @@ ws.onmessage = (event) => {
             <p>Quick Tunnels are ephemeral — new URL each session. Bridge binds to 0.0.0.0 only when tunnel is active.</p>
           </div>
           <div class="security-item">
-            <h4>👤 human-in-the-loop</h4>
-            <p>Sensitive actions like sending messages require explicit user confirmation.</p>
+            <h4>🖥️ local execution</h4>
+            <p>All commands run locally on your Mac. The bridge never exposes your system to the internet without the tunnel.</p>
           </div>
         </div>
 
