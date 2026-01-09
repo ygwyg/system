@@ -8,7 +8,7 @@ SYSTEM is a self-hosted AI assistant that controls your Mac. Talk to it naturall
 
 ### Desktop App (Recommended)
 
-Download [SYSTEM.dmg](https://github.com/ygwyg/system/releases/latest) from releases, drag to Applications, and launch. The app guides you through setup and lives in your menu bar.
+Download [SYSTEM.app](https://github.com/ygwyg/system/releases/latest) from releases, drag to Applications, and launch. The app guides you through setup and lives in your menu bar.
 
 ### CLI
 
@@ -62,14 +62,6 @@ The desktop app guides you through granting these.
 - macOS
 - [Anthropic API key](https://console.anthropic.com)
 - Node.js 18+ (CLI only)
-
-## Documentation
-
-Full documentation: **[ygwyg.github.io/system](https://ygwyg.github.io/system)**
-
-- [API Reference](https://ygwyg.github.io/system/#auth)
-- [Tools Reference](https://ygwyg.github.io/system/#core-tools)
-- [Security](https://ygwyg.github.io/system/#security)
 
 ## Security
 
