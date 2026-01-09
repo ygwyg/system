@@ -133,14 +133,6 @@ export const chatHTML = `<!DOCTYPE html>
       align-items: center;
       gap: 8px;
     }
-    .logo-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--accent);
-      flex-shrink: 0;
-    }
-    .logo-dot.offline { background: var(--red); }
     
     .header-right { display: flex; align-items: center; gap: 8px; }
     
@@ -226,7 +218,7 @@ export const chatHTML = `<!DOCTYPE html>
     
     .auth-title {
       font-family: var(--font-mono);
-      font-size: 48px;
+      font-size: 32px;
       font-weight: normal;
       color: var(--text-bright);
       letter-spacing: -2px;
@@ -879,7 +871,7 @@ export const chatHTML = `<!DOCTYPE html>
   <header>
     <div class="header-left">
       <button class="sidebar-toggle" id="sidebar-toggle">☰</button>
-      <div class="logo"><span class="logo-dot" id="status-dot"></span>SYSTEM</div>
+      <div class="logo">SYSTEM</div>
     </div>
     <div class="header-right">
       <button class="header-btn" id="theme-toggle" title="Toggle theme">◐</button>
@@ -896,7 +888,6 @@ export const chatHTML = `<!DOCTYPE html>
           <svg width="600" height="240" viewBox="0 0 600 240" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M536 0C571.346 0 600 28.6538 600 64V176C600 211.346 571.346 240 536 240H64C28.6538 240 0 211.346 0 176V64C0 28.6538 28.6538 0 64 0H536ZM70 42C54.536 42 42 54.536 42 70V170C42 185.464 54.536 198 70 198H530C545.464 198 558 185.464 558 170V70C558 54.536 545.464 42 530 42H70Z" fill="black"/><path d="M154 84H86C84.8954 84 84 84.8954 84 86V154C84 155.105 84.8954 156 86 156H154C155.105 156 156 155.105 156 154V86C156 84.8954 155.105 84 154 84Z" fill="url(#b1)"/><path d="M274 84H206C204.895 84 204 84.8954 204 86V154C204 155.105 204.895 156 206 156H274C275.105 156 276 155.105 276 154V86C276 84.8954 275.105 84 274 84Z" fill="url(#b2)"/><path d="M394 84H326C324.895 84 324 84.8954 324 86V154C324 155.105 324.895 156 326 156H394C395.105 156 396 155.105 396 154V86C396 84.8954 395.105 84 394 84Z" fill="url(#b3)"/><path d="M514 84H446C444.895 84 444 84.8954 444 86V154C444 155.105 444.895 156 446 156H514C515.105 156 516 155.105 516 154V86C516 84.8954 515.105 84 514 84Z" fill="url(#b4)"/><path opacity="0.08" d="M156 120H84V156H156V120Z" fill="black"/><path opacity="0.08" d="M276 120H204V156H276V120Z" fill="black"/><path opacity="0.08" d="M396 120H324V156H396V120Z" fill="black"/><path opacity="0.08" d="M516 120H444V156H516V120Z" fill="black"/><mask id="mb1" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="600" height="240"><path d="M536 0C571.346 0 600 28.6538 600 64V176C600 211.346 571.346 240 536 240H64C28.6538 240 0 211.346 0 176V64C0 28.6538 28.6538 0 64 0H536ZM70 42C54.536 42 42 54.536 42 70V170C42 185.464 54.536 198 70 198H530C545.464 198 558 185.464 558 170V70C558 54.536 545.464 42 530 42H70Z" fill="black"/></mask><g mask="url(#mb1)"><path d="M558.904 120H41.0959C18.3993 120 0 146.863 0 180C0 213.137 18.3993 240 41.0959 240H558.904C581.601 240 600 213.137 600 180C600 146.863 581.601 120 558.904 120Z" fill="url(#b5)"/></g><defs><linearGradient id="b1" x1="84" y1="84" x2="84" y2="156" gradientUnits="userSpaceOnUse"><stop/><stop offset="0.6"/><stop offset="1" stop-color="#888888"/></linearGradient><linearGradient id="b2" x1="204" y1="84" x2="204" y2="156" gradientUnits="userSpaceOnUse"><stop/><stop offset="0.6"/><stop offset="1" stop-color="#888888"/></linearGradient><linearGradient id="b3" x1="324" y1="84" x2="324" y2="156" gradientUnits="userSpaceOnUse"><stop/><stop offset="0.6"/><stop offset="1" stop-color="#888888"/></linearGradient><linearGradient id="b4" x1="444" y1="84" x2="444" y2="156" gradientUnits="userSpaceOnUse"><stop/><stop offset="0.6"/><stop offset="1" stop-color="#888888"/></linearGradient><linearGradient id="b5" x1="0" y1="120" x2="0" y2="240" gradientUnits="userSpaceOnUse"><stop stop-opacity="0"/><stop offset="0.2" stop-color="#7D7D7D" stop-opacity="0.1"/><stop offset="1" stop-color="#777777" stop-opacity="0.55"/></linearGradient></defs></svg>
         </div>
         <h1 class="auth-title">SYSTEM</h1>
-        <p class="auth-subtitle">システム</p>
       </div>
       <form id="auth-form" onsubmit="return false;">
         <input type="password" id="token" placeholder="enter" autocomplete="off">
