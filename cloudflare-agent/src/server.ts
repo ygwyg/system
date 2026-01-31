@@ -89,6 +89,9 @@ interface SystemState {
     description: string;
     timestamp: number;
   };
+  
+  // Async task tracking for 2-way sync
+  asyncTasks: Record<string, AsyncTask>;
 }
 
 interface ScheduledAction {
@@ -97,8 +100,22 @@ interface ScheduledAction {
   description: string;
 }
 
+// Async task tracking for 2-way sync
+interface AsyncTask {
+  id: string;
+  taskId: string; // Bridge's task ID
+  tool: string;
+  args: Record<string, unknown>;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  createdAt: number;
+  completedAt?: number;
+  result?: unknown;
+  error?: string;
+  conversationId?: string;
+}
+
 interface WSMessage {
-  type: "notification" | "scheduled_result" | "bridge_status" | "chat" | "ping";
+  type: "notification" | "scheduled_result" | "bridge_status" | "chat" | "ping" | "task_completed";
   payload: unknown;
   timestamp: string;
 }
@@ -132,6 +149,7 @@ export class SystemAgent extends Agent<Env, SystemState> {
     preferences: {},
     lastActive: Date.now(),
     scheduleRegistry: [],
+    asyncTasks: {},
   };
 
   private readonly RATE_LIMIT = 60;
@@ -532,6 +550,11 @@ export class SystemAgent extends Agent<Env, SystemState> {
       return this.handleExecute(request);
     }
     
+    // Computer Use Agent - agentic loop for visual automation
+    if (path.endsWith("/computer-use") && request.method === "POST") {
+      return this.handleComputerUse(request);
+    }
+    
     // Get schedules
     if (path.endsWith("/schedules") && request.method === "GET") {
       const registry = this.state.scheduleRegistry || [];
@@ -577,6 +600,38 @@ export class SystemAgent extends Agent<Env, SystemState> {
       return Response.json({ success: true });
     }
     
+    // ═══════════════════════════════════════════════════════════════
+    // 2-Way Sync: Callback endpoint for Bridge to notify task completion
+    // ═══════════════════════════════════════════════════════════════
+    
+    // Callback from Bridge when async task completes
+    if (path.endsWith("/callback") && request.method === "POST") {
+      return this.handleTaskCallback(request);
+    }
+    
+    // Execute tool asynchronously (returns immediately, Bridge calls back)
+    if (path.endsWith("/execute-async") && request.method === "POST") {
+      return this.handleAsyncExecute(request);
+    }
+    
+    // Get async task status
+    if (path.match(/\/tasks\/[^/]+$/) && request.method === "GET") {
+      const taskId = path.split('/').pop()!;
+      const task = this.state.asyncTasks[taskId];
+      if (!task) {
+        return Response.json({ error: "Task not found" }, { status: 404 });
+      }
+      return Response.json(task);
+    }
+    
+    // List async tasks
+    if (path.endsWith("/tasks") && request.method === "GET") {
+      const tasks = Object.values(this.state.asyncTasks || {})
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 50);
+      return Response.json({ tasks });
+    }
+    
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -598,6 +653,458 @@ export class SystemAgent extends Agent<Env, SystemState> {
     } catch (error) {
       return Response.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
     }
+  }
+
+  async handleComputerUse(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { 
+        goal: string;
+        maxIterations?: number;
+        app?: string;
+      };
+
+      if (!body.goal) {
+        return Response.json({ error: "Missing 'goal' parameter" }, { status: 400 });
+      }
+
+      const maxIterations = Math.min(body.maxIterations || 10, 20);
+      const result = await this.runComputerUseLoop(body.goal, maxIterations, body.app);
+      return Response.json(result);
+    } catch (error) {
+      return Response.json({ 
+        error: error instanceof Error ? error.message : "Unknown error",
+        success: false 
+      }, { status: 500 });
+    }
+  }
+
+  async runComputerUseLoop(
+    goal: string,
+    maxIterations: number,
+    targetApp?: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    iterations: number;
+    actions: Array<{ tool: string; args: Record<string, unknown>; result: string }>;
+  }> {
+    const actions: Array<{ tool: string; args: Record<string, unknown>; result: string }> = [];
+    
+    if (targetApp) {
+      const focusResult = await this.callBridge('cua_focus_app', { app: targetApp });
+      if (focusResult.success) {
+        actions.push({ tool: 'cua_focus_app', args: { app: targetApp }, result: focusResult.result || 'Focused' });
+      }
+      await this.callBridge('cua_wait', { seconds: 0.5 });
+    }
+
+    for (let iteration = 0; iteration < maxIterations; iteration++) {
+      const screenshotResult = await this.callBridge('cua_screenshot', { type: 'full' });
+      
+      if (!screenshotResult.success || !screenshotResult.image) {
+        return { 
+          success: false, 
+          message: `Screenshot failed: ${screenshotResult.error || screenshotResult.result || 'Unknown error'}`, 
+          iterations: iteration + 1,
+          actions 
+        };
+      }
+
+      const nextAction = await this.analyzeScreenAndDecide(
+        goal,
+        screenshotResult.image,
+        screenshotResult.result || '{}',
+        actions,
+        iteration
+      );
+
+      if (nextAction.done) {
+        return {
+          success: true,
+          message: nextAction.message || 'Goal completed',
+          iterations: iteration + 1,
+          actions
+        };
+      }
+
+      if (nextAction.action) {
+        const actionResult = await this.callBridge(nextAction.action.tool, nextAction.action.args);
+        actions.push({
+          tool: nextAction.action.tool,
+          args: nextAction.action.args,
+          result: actionResult.success ? (actionResult.result || 'Success') : (actionResult.error || 'Failed')
+        });
+
+        if (!actionResult.success) {
+          console.log(`[CUA] Action failed: ${nextAction.action.tool}`, actionResult.error);
+        }
+
+        if (nextAction.action.tool !== 'cua_wait') {
+          await this.callBridge('cua_wait', { seconds: 0.3 });
+        }
+      }
+    }
+
+    return {
+      success: false,
+      message: `Max iterations (${maxIterations}) reached without completing goal`,
+      iterations: maxIterations,
+      actions
+    };
+  }
+
+  async analyzeScreenAndDecide(
+    goal: string,
+    image: { data: string; mimeType: string },
+    screenInfo: string,
+    previousActions: Array<{ tool: string; args: Record<string, unknown>; result: string }>,
+    iteration: number
+  ): Promise<{
+    done: boolean;
+    message?: string;
+    action?: { tool: string; args: Record<string, unknown> };
+  }> {
+    const recentActions = previousActions.slice(-5).map(a => 
+      `- ${a.tool}(${JSON.stringify(a.args)}) → ${a.result}`
+    ).join('\n');
+
+    const systemPrompt = `You are a Computer Use Agent. You control a Mac by analyzing screenshots and executing actions.
+
+GOAL: ${goal}
+
+AVAILABLE ACTIONS:
+- cua_click: Click at coordinates {x, y, button?: "left"|"right", clicks?: 1|2|3}
+- cua_type: Type text {text, delay?: ms}
+- cua_key: Press key combo {key: "return"|"cmd+c"|"cmd+v"|etc}
+- cua_scroll: Scroll {direction: "up"|"down"|"left"|"right", amount?: 1-10, x?, y?}
+- cua_drag: Drag from point to point {fromX, fromY, toX, toY}
+- cua_wait: Wait {seconds: 0.1-30}
+- cua_focus_app: Focus app {app: "AppName"}
+- ax_find: Find UI elements {role: "AXButton"|"AXTextField"|etc, title?: "search term"}
+
+SCREEN INFO: ${screenInfo}
+
+PREVIOUS ACTIONS:
+${recentActions || 'None yet'}
+
+ITERATION: ${iteration + 1}
+
+RESPONSE FORMAT (JSON only):
+If goal is complete:
+{"done": true, "message": "Description of what was accomplished"}
+
+If action needed:
+{"done": false, "action": {"tool": "cua_click", "args": {"x": 500, "y": 300}}}
+
+RULES:
+1. Look at the screenshot carefully. Identify UI elements by their visual appearance and position.
+2. Click in the CENTER of buttons/elements, not at edges.
+3. After clicking text fields, use cua_type to enter text.
+4. Use cua_key for keyboard shortcuts (cmd+c, cmd+v, return, escape, tab).
+5. If something didn't work, try a different approach.
+6. If the goal is clearly impossible, return done: true with an explanation.
+7. Be precise with coordinates - examine the screenshot carefully.
+
+Respond with ONLY valid JSON, no markdown or explanation.`;
+
+    const visionMessages = [
+      {
+        role: "user" as const,
+        content: [
+          { 
+            type: "image" as const, 
+            source: { 
+              type: "base64" as const, 
+              media_type: image.mimeType, 
+              data: image.data 
+            } 
+          },
+          { 
+            type: "text" as const, 
+            text: `Analyze this screenshot and determine the next action to achieve the goal. Respond with JSON only.`
+          }
+        ]
+      }
+    ];
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": this.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({ 
+        model: this.env.MODEL_SMART || "claude-sonnet-4-20250514", 
+        max_tokens: 1024, 
+        system: systemPrompt, 
+        messages: visionMessages 
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Claude API error: ${response.status}`);
+    }
+
+    const data = await response.json() as { content: { text: string }[] };
+    const responseText = data.content[0]?.text || '{"done": true, "message": "No response from AI"}';
+    
+    try {
+      const cleanedJson = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      return JSON.parse(cleanedJson);
+    } catch (e) {
+      console.error('[CUA] Failed to parse AI response:', responseText);
+      return { done: true, message: `Failed to parse AI response: ${responseText.slice(0, 100)}` };
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 2-Way Sync: Async task execution with callbacks
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Handle async tool execution - returns immediately, Bridge calls back when done
+   */
+  async handleAsyncExecute(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { 
+        tool: string; 
+        args: Record<string, unknown>;
+        conversationId?: string;
+      };
+
+      if (!body.tool) {
+        return Response.json({ error: "Missing tool parameter" }, { status: 400 });
+      }
+
+      // Generate our internal task ID
+      const taskId = `async_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      
+      // Build callback URL (this agent's callback endpoint)
+      const callbackUrl = `${this.env.BRIDGE_URL.replace(/:\d+/, '')}:8787/agents/system-agent/callback`;
+      
+      // Call Bridge's async execute endpoint
+      const response = await fetch(`${this.env.BRIDGE_URL}/execute-async`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json", 
+          "Authorization": `Bearer ${this.env.BRIDGE_AUTH_TOKEN}` 
+        },
+        body: JSON.stringify({
+          tool: body.tool,
+          args: body.args,
+          callbackUrl,
+          callbackToken: this.env.API_SECRET,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        return Response.json({ error: `Bridge error: ${error}` }, { status: 500 });
+      }
+
+      const bridgeResult = await response.json() as { taskId: string; status: string };
+
+      // Track the task
+      const asyncTask: AsyncTask = {
+        id: taskId,
+        taskId: bridgeResult.taskId,
+        tool: body.tool,
+        args: body.args,
+        status: 'pending',
+        createdAt: Date.now(),
+        conversationId: body.conversationId,
+      };
+
+      this.setState({
+        ...this.state,
+        asyncTasks: {
+          ...this.state.asyncTasks,
+          [taskId]: asyncTask,
+        },
+      });
+
+      // Notify connected clients that task was submitted
+      this.broadcastToClients({
+        type: "notification",
+        payload: {
+          title: "Task Submitted",
+          message: `Executing ${body.tool} asynchronously`,
+          taskId,
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      return Response.json({
+        taskId,
+        bridgeTaskId: bridgeResult.taskId,
+        status: 'accepted',
+        message: `Task ${taskId} submitted for async execution`,
+      });
+    } catch (error) {
+      return Response.json({ 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      }, { status: 500 });
+    }
+  }
+
+  /**
+   * Handle callback from Bridge when async task completes
+   * This is the 2-way sync endpoint - Bridge calls back to Agent
+   */
+  async handleTaskCallback(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as {
+        taskId: string;
+        tool: string;
+        args: Record<string, unknown>;
+        status: 'completed' | 'failed';
+        result?: unknown;
+        error?: string;
+        completedAt?: number;
+      };
+
+      console.log(`[Callback] Received callback for task ${body.taskId}:`, body.status);
+
+      // Find our internal task by Bridge's taskId
+      const asyncTasks = this.state.asyncTasks || {};
+      let internalTaskId: string | null = null;
+      let task: AsyncTask | null = null;
+
+      for (const [id, t] of Object.entries(asyncTasks)) {
+        if (t.taskId === body.taskId) {
+          internalTaskId = id;
+          task = t;
+          break;
+        }
+      }
+
+      if (!task || !internalTaskId) {
+        // Task not found - might be a direct callback or old task
+        console.warn(`[Callback] Unknown task ${body.taskId}`);
+        return Response.json({ success: true, message: "Task not tracked" });
+      }
+
+      // Update task state
+      const updatedTask: AsyncTask = {
+        ...task,
+        status: body.status,
+        completedAt: body.completedAt || Date.now(),
+        result: body.result,
+        error: body.error,
+      };
+
+      this.setState({
+        ...this.state,
+        asyncTasks: {
+          ...asyncTasks,
+          [internalTaskId]: updatedTask,
+        },
+      });
+
+      // Broadcast to connected WebSocket clients - this is the real-time 2-way sync!
+      this.broadcastToClients({
+        type: "task_completed",
+        payload: {
+          taskId: internalTaskId,
+          bridgeTaskId: body.taskId,
+          tool: body.tool,
+          args: body.args,
+          status: body.status,
+          result: body.result,
+          error: body.error,
+          completedAt: updatedTask.completedAt,
+          conversationId: task.conversationId,
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      // If this task was associated with a conversation, add to history
+      if (task.conversationId) {
+        const conversation = this.state.conversations[task.conversationId];
+        if (conversation) {
+          const resultText = body.status === 'completed' 
+            ? `[Async task completed] ${body.tool}: ${JSON.stringify(body.result)}`
+            : `[Async task failed] ${body.tool}: ${body.error}`;
+          
+          const newHistory = [
+            ...conversation.history,
+            { role: "assistant" as const, content: resultText },
+          ];
+          this.updateConversationHistory(task.conversationId, newHistory);
+        }
+      }
+
+      console.log(`[Callback] Task ${internalTaskId} updated and broadcast to clients`);
+
+      return Response.json({ 
+        success: true, 
+        message: "Callback processed",
+        taskId: internalTaskId,
+      });
+    } catch (error) {
+      console.error('[Callback] Error processing callback:', error);
+      return Response.json({ 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      }, { status: 500 });
+    }
+  }
+
+  /**
+   * Call Bridge asynchronously - returns immediately, result comes via callback
+   */
+  async callBridgeAsync(
+    tool: string, 
+    args: Record<string, unknown>,
+    conversationId?: string
+  ): Promise<{ taskId: string; status: string }> {
+    const taskId = `async_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    
+    // Build callback URL for this agent
+    const callbackUrl = new URL(this.env.BRIDGE_URL);
+    callbackUrl.port = '8787';
+    callbackUrl.pathname = '/agents/system-agent/callback';
+    
+    const response = await fetch(`${this.env.BRIDGE_URL}/execute-async`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json", 
+        "Authorization": `Bearer ${this.env.BRIDGE_AUTH_TOKEN}` 
+      },
+      body: JSON.stringify({
+        tool,
+        args,
+        callbackUrl: callbackUrl.toString(),
+        callbackToken: this.env.API_SECRET,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Bridge async execute failed: ${response.status}`);
+    }
+
+    const bridgeResult = await response.json() as { taskId: string };
+
+    // Track the task
+    const asyncTask: AsyncTask = {
+      id: taskId,
+      taskId: bridgeResult.taskId,
+      tool,
+      args,
+      status: 'pending',
+      createdAt: Date.now(),
+      conversationId,
+    };
+
+    this.setState({
+      ...this.state,
+      asyncTasks: {
+        ...this.state.asyncTasks,
+        [taskId]: asyncTask,
+      },
+    });
+
+    return { taskId, status: 'pending' };
   }
 
   isConfirmation(message: string): boolean {

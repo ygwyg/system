@@ -155,6 +155,74 @@ GET /health
 | `clipboard_set` | Set clipboard | `text` |
 | `screenshot` | Take screenshot | — |
 
+### Computer Use Agent (CUA)
+
+Visual automation - AI sees your screen and controls mouse/keyboard.
+
+| Tool | Description | Args |
+|------|-------------|------|
+| `cua_screenshot` | Take screenshot | `type?` (full/window) |
+| `cua_click` | Click at coordinates | `x`, `y`, `button?`, `clicks?` |
+| `cua_double_click` | Double-click | `x`, `y` |
+| `cua_right_click` | Right-click | `x`, `y` |
+| `cua_type` | Type text | `text`, `delay?` |
+| `cua_key` | Press key combo | `key` (e.g., "cmd+c", "return") |
+| `cua_scroll` | Scroll | `direction`, `amount?`, `x?`, `y?` |
+| `cua_drag` | Drag from point to point | `fromX`, `fromY`, `toX`, `toY` |
+| `cua_focus_app` | Focus application | `app` |
+| `cua_launch_app` | Launch application | `app` |
+| `cua_window_manage` | Manage window | `app`, `action`, `x?`, `y?`, `width?`, `height?` |
+| `cua_menu_click` | Click menu item | `app`, `menu`, `item`, `submenu?` |
+| `cua_get_windows` | List visible windows | — |
+| `cua_mouse_position` | Get cursor position | — |
+| `cua_screen_info` | Get display info | — |
+| `cua_wait` | Wait N seconds | `seconds` |
+| `cua_wait_for` | Wait for UI element | `role`, `title?`, `condition?`, `timeout?` |
+| `cua_select_all` | Cmd+A | — |
+| `cua_copy` | Cmd+C | — |
+| `cua_paste` | Cmd+V | — |
+| `cua_undo` | Cmd+Z | — |
+| `cua_save` | Cmd+S | — |
+| `cua_new_tab` | Cmd+T | — |
+| `cua_close_window` | Cmd+W | — |
+| `cua_open_url` | Open URL in browser | `url` |
+
+### Accessibility (AX)
+
+Find and interact with UI elements by role/title.
+
+| Tool | Description | Args |
+|------|-------------|------|
+| `ax_get_elements` | Get UI tree of frontmost app | — |
+| `ax_find` | Find elements by role | `role`, `title?` |
+| `ax_click_element` | Click element by title | `title`, `role?` |
+| `ax_type_in_field` | Type in text field | `text`, `field?`, `clear?` |
+| `ax_focused_element` | Get focused element | — |
+| `ax_list_apps` | List running apps | — |
+
+### Computer Use Endpoint
+
+```http
+POST /computer-use
+Authorization: Bearer <api_secret>
+
+{
+  "goal": "Click the Submit button",
+  "maxIterations": 10,
+  "app": "Safari"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Clicked Submit button",
+  "iterations": 2,
+  "actions": [...]
+}
+```
+
 ### Music
 
 | Tool | Description | Args |

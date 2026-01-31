@@ -6,7 +6,7 @@ import { spawn } from 'child_process';
 import { readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import type { SystemTool } from './types.js';
+import type { SystemTool, ToolResult } from './types.js';
 
 export const screenshotTools: SystemTool[] = [
   {
@@ -104,7 +104,7 @@ export const screenshotTools: SystemTool[] = [
             },
           ],
           savedTo: savedPath,
-        } as any;
+        } as ToolResult & { savedTo?: string };
       } catch (error) {
         try {
           unlinkSync(tmpFile);

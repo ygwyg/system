@@ -610,23 +610,48 @@ function scanRaycastExtensions(): Extension[] {
         if (!manifest.name || !manifest.commands || !Array.isArray(manifest.commands)) continue;
 
         const validCommands = manifest.commands
-          .filter((cmd: any) => cmd && cmd.name && cmd.title)
-          .filter((cmd: any) => !cmd.mode || cmd.mode === 'no-view' || cmd.mode === 'view')
-          .map((cmd: any) => ({
-            name: cmd.name,
-            title: cmd.title,
-            description: cmd.description || '',
-            ...(cmd.arguments &&
-              Array.isArray(cmd.arguments) &&
-              cmd.arguments.length > 0 && {
-                arguments: cmd.arguments.map((arg: any) => ({
-                  name: arg.name || 'input',
-                  type: arg.type || 'text',
-                  description: arg.placeholder || arg.description || '',
-                  required: arg.required ?? false,
-                })),
-              }),
-          }));
+          .filter(
+            (cmd: { name?: string; title?: string; mode?: string }) => cmd && cmd.name && cmd.title
+          )
+          .filter(
+            (cmd: { mode?: string }) => !cmd.mode || cmd.mode === 'no-view' || cmd.mode === 'view'
+          )
+          .map(
+            (cmd: {
+              name: string;
+              title: string;
+              description?: string;
+              arguments?: Array<{
+                name?: string;
+                type?: string;
+                placeholder?: string;
+                description?: string;
+                required?: boolean;
+              }>;
+            }) => ({
+              name: cmd.name,
+              title: cmd.title,
+              description: cmd.description || '',
+              ...(cmd.arguments &&
+                Array.isArray(cmd.arguments) &&
+                cmd.arguments.length > 0 && {
+                  arguments: cmd.arguments.map(
+                    (arg: {
+                      name?: string;
+                      type?: string;
+                      placeholder?: string;
+                      description?: string;
+                      required?: boolean;
+                    }) => ({
+                      name: arg.name || 'input',
+                      type: arg.type || 'text',
+                      description: arg.placeholder || arg.description || '',
+                      required: arg.required ?? false,
+                    })
+                  ),
+                }),
+            })
+          );
 
         if (validCommands.length === 0) continue;
 

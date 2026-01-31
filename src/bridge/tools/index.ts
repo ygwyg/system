@@ -32,8 +32,14 @@ export { browserTools } from './browser.js';
 export { systemTools } from './system.js';
 export { screenshotTools } from './screenshot.js';
 export { inputTools } from './input.js';
+export { cuaTools } from './cua.js';
+export { accessibilityTools } from './accessibility.js';
+export {
+  createDiscoveryTool,
+  getDiscoveredRaycastTools,
+  discoverInstalledCommands,
+} from './raycast-discovery.js';
 
-// Load config and generate extension-specific tools
 import { loadConfig, generateExtensionTools } from './raycast.js';
 import { coreTools } from './core.js';
 import { raycastTools } from './raycast.js';
@@ -51,11 +57,14 @@ import { browserTools } from './browser.js';
 import { systemTools } from './system.js';
 import { screenshotTools } from './screenshot.js';
 import { inputTools } from './input.js';
+import { cuaTools } from './cua.js';
+import { accessibilityTools } from './accessibility.js';
+import { createDiscoveryTool, getDiscoveredRaycastTools } from './raycast-discovery.js';
 
 const config = loadConfig();
 const configuredExtensionTools = generateExtensionTools(config);
+const raycastDiscoveryTool = createDiscoveryTool();
 
-// Export all tools - organized by category
 export const allTools = [
   ...coreTools, // open_url, open_app, applescript, shell, shell_list
   ...raycastTools, // raycast_search, raycast_confetti, raycast_ai, raycast
@@ -73,5 +82,13 @@ export const allTools = [
   ...finderTools, // finder_search, downloads, desktop, reveal, trash
   ...shortcutsTools, // shortcut_run, list
   ...browserTools, // browser_url, tabs
-  ...configuredExtensionTools, // user's raycast extensions
+  ...cuaTools, // cua_screenshot, cua_click, cua_type, cua_key, cua_scroll, cua_drag, cua_wait, cua_get_windows, cua_focus_app, cua_window_manage
+  ...accessibilityTools, // ax_get_elements, ax_element_at, ax_find, ax_click, ax_set_value, ax_list_apps, ax_app_elements
+  raycastDiscoveryTool, // raycast_discover - auto-discover installed extensions
+  ...configuredExtensionTools, // user's manually configured raycast extensions
 ];
+
+export async function getAllToolsWithDiscovery(): Promise<typeof allTools> {
+  const discoveredTools = await getDiscoveredRaycastTools();
+  return [...allTools, ...discoveredTools];
+}

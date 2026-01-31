@@ -36,11 +36,11 @@ export function execCommand(
 }
 
 /**
- * Run AppleScript safely using spawn
+ * Run AppleScript safely using spawn with stdin for multi-line scripts
  */
 export function runAppleScript(script: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('osascript', ['-e', script], { timeout: 30000 });
+    const proc = spawn('osascript', ['-'], { timeout: 30000 });
     let stdout = '';
     let stderr = '';
 
@@ -60,5 +60,8 @@ export function runAppleScript(script: string): Promise<string> {
     });
 
     proc.on('error', reject);
+
+    proc.stdin.write(script);
+    proc.stdin.end();
   });
 }

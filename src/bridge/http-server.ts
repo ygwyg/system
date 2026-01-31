@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import express from 'express';
-import { allTools } from './tools/index.js';
+import { allTools, getAllToolsWithDiscovery } from './tools/index.js';
+import type { SystemTool } from './tools/index.js';
 import { ZodError } from 'zod';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -40,6 +41,8 @@ function loadAuthToken(): string {
 }
 
 const AUTH_TOKEN = loadAuthToken();
+
+let loadedTools: SystemTool[] = allTools;
 
 if (!AUTH_TOKEN) {
   console.error(`
@@ -104,6 +107,66 @@ interface LogEntry {
 }
 const executionLog: LogEntry[] = [];
 const MAX_LOG_SIZE = 100;
+
+// Task registry for async tasks with callbacks
+interface PendingTask {
+  id: string;
+  tool: string;
+  args: Record<string, unknown>;
+  callbackUrl: string;
+  callbackToken: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  createdAt: number;
+  completedAt?: number;
+  result?: unknown;
+  error?: string;
+}
+const pendingTasks = new Map<string, PendingTask>();
+
+// Clean up old completed tasks periodically (keep for 5 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, task] of pendingTasks.entries()) {
+    if (task.completedAt && now - task.completedAt > 5 * 60 * 1000) {
+      pendingTasks.delete(id);
+    }
+  }
+}, 60 * 1000);
+
+// Helper to generate task IDs
+function generateTaskId(): string {
+  return `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Helper to send callback to Agent
+async function sendCallback(task: PendingTask): Promise<void> {
+  try {
+    const response = await fetch(task.callbackUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${task.callbackToken}`,
+      },
+      body: JSON.stringify({
+        taskId: task.id,
+        tool: task.tool,
+        args: task.args,
+        status: task.status,
+        result: task.result,
+        error: task.error,
+        completedAt: task.completedAt,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Callback] Failed to notify ${task.callbackUrl}: ${response.status}`);
+    } else {
+      console.log(`[Callback] Successfully notified ${task.callbackUrl} for task ${task.id}`);
+    }
+  } catch (error) {
+    console.error(`[Callback] Error notifying ${task.callbackUrl}:`, error);
+  }
+}
 
 // Middleware
 app.use(express.json({ limit: '100kb' })); // Limit body size
@@ -221,7 +284,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    tools: allTools.length,
+    tools: loadedTools.length,
     version: '1.0.0',
   });
 });
@@ -231,7 +294,7 @@ app.get('/health', (req, res) => {
  */
 app.get('/tools', authenticate, (req, res) => {
   res.json({
-    tools: allTools.map((tool) => ({
+    tools: loadedTools.map((tool) => ({
       name: tool.name,
       description: tool.description,
       inputSchema: tool.inputSchema,
@@ -249,13 +312,12 @@ app.post('/execute', authenticate, async (req, res) => {
     return res.status(400).json({ error: 'Missing or invalid tool name' });
   }
 
-  // Find the tool
-  const tool = allTools.find((t) => t.name === toolName);
+  const tool = loadedTools.find((t) => t.name === toolName);
 
   if (!tool) {
     return res.status(404).json({
       error: `Tool "${toolName}" not found`,
-      availableTools: allTools.map((t) => t.name),
+      availableTools: loadedTools.map((t) => t.name),
     });
   }
 
@@ -353,7 +415,7 @@ app.post('/batch', authenticate, async (req, res) => {
   const results = [];
 
   for (const { tool: toolName, args } of tools) {
-    const tool = allTools.find((t) => t.name === toolName);
+    const tool = loadedTools.find((t) => t.name === toolName);
 
     if (!tool) {
       results.push({
@@ -403,18 +465,162 @@ app.get('/logs', authenticate, (req, res) => {
 });
 
 /**
+ * Execute a tool asynchronously with callback
+ * The Bridge will call back to the provided URL when the task completes
+ */
+app.post('/execute-async', authenticate, async (req, res) => {
+  const { tool: toolName, args, callbackUrl, callbackToken } = req.body;
+
+  if (!toolName || typeof toolName !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid tool name' });
+  }
+
+  if (!callbackUrl || typeof callbackUrl !== 'string') {
+    return res.status(400).json({ error: 'Missing callbackUrl for async execution' });
+  }
+
+  if (!callbackToken || typeof callbackToken !== 'string') {
+    return res.status(400).json({ error: 'Missing callbackToken for async execution' });
+  }
+
+  const tool = loadedTools.find((t) => t.name === toolName);
+
+  if (!tool) {
+    return res.status(404).json({
+      error: `Tool "${toolName}" not found`,
+      availableTools: loadedTools.map((t) => t.name),
+    });
+  }
+
+  // Create task record
+  const taskId = generateTaskId();
+  const task: PendingTask = {
+    id: taskId,
+    tool: toolName,
+    args: args || {},
+    callbackUrl,
+    callbackToken,
+    status: 'pending',
+    createdAt: Date.now(),
+  };
+  pendingTasks.set(taskId, task);
+
+  // Return immediately with task ID
+  res.json({
+    taskId,
+    status: 'accepted',
+    message: `Task ${taskId} queued for execution`,
+  });
+
+  // Execute asynchronously and callback when done
+  setImmediate(async () => {
+    task.status = 'running';
+
+    try {
+      console.log(`[Async] Starting task ${taskId}: ${toolName}`);
+      const result = await tool.handler(args || {});
+
+      task.status = 'completed';
+      task.completedAt = Date.now();
+
+      // Handle both text and image responses
+      const content = result.content[0];
+      if (content?.type === 'image' && content.data) {
+        task.result = {
+          success: !result.isError,
+          tool: toolName,
+          result: 'Screenshot captured',
+          image: {
+            data: content.data,
+            mimeType: content.mimeType || 'image/png',
+          },
+        };
+      } else {
+        task.result = {
+          success: !result.isError,
+          tool: toolName,
+          result: content?.text ?? 'Action completed',
+        };
+      }
+
+      console.log(`[Async] Task ${taskId} completed successfully`);
+    } catch (error) {
+      task.status = 'failed';
+      task.completedAt = Date.now();
+      task.error = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[Async] Task ${taskId} failed:`, error);
+    }
+
+    // Send callback to Agent
+    await sendCallback(task);
+  });
+});
+
+/**
+ * Get status of a pending task
+ */
+app.get('/tasks/:taskId', authenticate, (req, res) => {
+  const { taskId } = req.params;
+  const task = pendingTasks.get(taskId);
+
+  if (!task) {
+    return res.status(404).json({ error: 'Task not found' });
+  }
+
+  res.json({
+    taskId: task.id,
+    tool: task.tool,
+    status: task.status,
+    createdAt: task.createdAt,
+    completedAt: task.completedAt,
+    result: task.result,
+    error: task.error,
+  });
+});
+
+/**
+ * List all pending/recent tasks
+ */
+app.get('/tasks', authenticate, (req, res) => {
+  const tasks = Array.from(pendingTasks.values())
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 50)
+    .map((t) => ({
+      taskId: t.id,
+      tool: t.tool,
+      status: t.status,
+      createdAt: t.createdAt,
+      completedAt: t.completedAt,
+    }));
+
+  res.json({ tasks });
+});
+
+/**
  * Start server
  * By default, binds to localhost only for security.
  * Set HOST=0.0.0.0 to listen on all interfaces (for tunnel use).
  */
 const HOST = process.env.HOST || '127.0.0.1';
 
-app.listen(Number(PORT), HOST, () => {
-  const toolCount = String(allTools.length).padEnd(2);
-  const hostDisplay = HOST === '127.0.0.1' ? 'localhost (local only)' : HOST;
-  const securityMode = HOST === '127.0.0.1' ? '🔒 Local only' : '⚠️  Network exposed';
+async function startServer() {
+  console.log('Discovering Raycast extensions...');
+  try {
+    loadedTools = await getAllToolsWithDiscovery();
+    const discoveredCount = loadedTools.length - allTools.length;
+    if (discoveredCount > 0) {
+      console.log(`Found ${discoveredCount} auto-discovered Raycast commands`);
+    }
+  } catch (err) {
+    console.warn('Could not auto-discover Raycast extensions:', err);
+  }
 
-  console.log(`
+  app.listen(Number(PORT), HOST, () => {
+    const toolCount = String(loadedTools.length).padEnd(2);
+    const hostDisplay = HOST === '127.0.0.1' ? 'localhost (local only)' : HOST;
+    const securityMode = HOST === '127.0.0.1' ? '🔒 Local only' : '⚠️  Network exposed';
+
+    console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
 ║    ███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗  ║
@@ -434,11 +640,14 @@ app.listen(Number(PORT), HOST, () => {
 ║  Auth: ✅ Token configured                                 ║
 ╠════════════════════════════════════════════════════════════╣
 ║  Endpoints:                                                ║
-║    GET  /health     Health check (no auth)                 ║
-║    GET  /tools      List available tools                   ║
-║    POST /execute    Execute a tool                         ║
-║    POST /batch      Execute multiple tools (max 10)        ║
-║    GET  /logs       View execution logs                    ║
+║    GET  /health        Health check (no auth)              ║
+║    GET  /tools         List available tools                ║
+║    POST /execute       Execute a tool (sync)               ║
+║    POST /execute-async Execute with callback (2-way sync)  ║
+║    POST /batch         Execute multiple tools (max 10)     ║
+║    GET  /tasks         List async tasks                    ║
+║    GET  /tasks/:id     Get task status                     ║
+║    GET  /logs          View execution logs                 ║
 ╠════════════════════════════════════════════════════════════╣
 ║  Security: ${securityMode.padEnd(39)}║
 ║    • Rate limit: ${RATE_LIMIT_MAX} req/min                              ║
@@ -447,13 +656,16 @@ app.listen(Number(PORT), HOST, () => {
 ╚════════════════════════════════════════════════════════════╝
   `);
 
-  console.log(`Tools available:`);
-  allTools.forEach((tool) => {
-    console.log(`  • ${tool.name}`);
-  });
+    console.log(`Tools available:`);
+    loadedTools.forEach((tool) => {
+      console.log(`  • ${tool.name}`);
+    });
 
-  console.log(`\nSYSTEM is online and ready.\n`);
-});
+    console.log(`\nSYSTEM is online and ready.\n`);
+  });
+}
+
+startServer();
 
 // Graceful shutdown
 process.on('SIGINT', () => {

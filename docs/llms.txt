@@ -84,6 +84,27 @@ Events: `scheduled_result`, `notification`, `bridge_status`
 - `clipboard_get/set` - Clipboard access
 - `screenshot` - Take screenshot
 
+## Computer Use Agent (CUA)
+Visual automation - AI sees screen and controls mouse/keyboard.
+
+**Vision**: `cua_screenshot`, `cua_screen_info`, `cua_get_windows`, `cua_mouse_position`
+**Mouse**: `cua_click`, `cua_double_click`, `cua_right_click`, `cua_drag`, `cua_scroll`
+**Keyboard**: `cua_type`, `cua_key`, `cua_select_all`, `cua_copy`, `cua_paste`, `cua_undo`, `cua_save`
+**Apps**: `cua_focus_app`, `cua_launch_app`, `cua_window_manage`, `cua_menu_click`
+**Tabs**: `cua_new_tab`, `cua_switch_tab`, `cua_close_window`
+**Utility**: `cua_wait`, `cua_wait_for`, `cua_open_url`
+
+**Agentic endpoint**: `POST /computer-use` - runs screenshot→analyze→act loop until goal complete.
+
+## Accessibility (AX)
+Find/interact with UI elements by role/title instead of coordinates.
+- `ax_get_elements` - Get UI tree of frontmost app
+- `ax_find` - Find elements by role (AXButton, AXTextField, etc.)
+- `ax_click_element` - Click button by title
+- `ax_type_in_field` - Type in text field by name
+- `ax_focused_element` - Get focused element
+- `ax_list_apps` - List running apps
+
 ## Music
 - `music_play/pause/next/previous/current`
 - `volume_get/set/up/down/mute`
